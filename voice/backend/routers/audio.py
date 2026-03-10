@@ -2,30 +2,47 @@ from __future__ import annotations
 
 import logging
 import shutil
+import struct
 import subprocess
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
+import torch
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
 from ..runners.base import DiarizationResult, TranscriptionResult, VadResult
-from ..runners.parakeet import ParakeetRunner
-from ..runners.silero_vad import SileroVadRunner
-from ..runners.sortformer import SortformerRunner
 from ..runners.voxtral import VoxtralRunner
-from ..runners.whisper import WhisperRunner
 
 router = APIRouter(tags=["audio"])
 logger = logging.getLogger(__name__)
 
-RUNNER_CLASSES = {
-    "whisper": WhisperRunner,
-    "parakeet-tdt": ParakeetRunner,
-    "voxtral-realtime": VoxtralRunner,
-    "sortformer": SortformerRunner,
-    "silero-vad": SileroVadRunner,
-}
+_decoder_cache: dict[str, object] = {}
+
+
+def _get_decoder(runner_key: str, model_dir: Path):
+    cache_key = f"{runner_key}:{model_dir}"
+    if cache_key in _decoder_cache:
+        return _decoder_cache[cache_key]
+
+    if runner_key == "silero-vad":
+        from ..decoders.silero_vad_decoder import SileroVadDecoder
+        dec = SileroVadDecoder(model_dir)
+    elif runner_key == "whisper":
+        from ..decoders.whisper_decoder import WhisperDecoder
+        dec = WhisperDecoder(model_dir)
+    elif runner_key == "parakeet-tdt":
+        from ..decoders.parakeet_decoder import ParakeetDecoder
+        dec = ParakeetDecoder(model_dir)
+    elif runner_key == "sortformer":
+        from ..decoders.sortformer_decoder import SortformerDecoder
+        dec = SortformerDecoder(model_dir)
+    else:
+        raise ValueError(f"No decoder for {runner_key}")
+
+    _decoder_cache[cache_key] = dec
+    logger.info(f"Loaded pybinding decoder: {runner_key}")
+    return dec
 
 
 def _resolve_model(request: Request, model_id: str, backend: str | None):
@@ -43,32 +60,58 @@ def _resolve_model(request: Request, model_id: str, backend: str | None):
         if backend is None:
             raise HTTPException(
                 400,
-                f"Model {model_id} not ready on any backend. "
+                f"Model {model_id} not ready. "
                 f"Download it first via POST /v1/models/{model_id}/download",
             )
 
     if not entry.is_ready(backend):
         raise HTTPException(
             400,
-            f"Model {model_id} not ready on {backend}. "
-            f"Runner available: {backend in entry.available_runners}, "
-            f"Model downloaded: {backend in entry.downloaded_backends}",
+            f"Model {model_id} not ready on {backend}.",
         )
 
-    runner_cls = RUNNER_CLASSES.get(entry.runner_key)
-    if not runner_cls:
-        raise HTTPException(500, f"No runner class for {entry.runner_key}")
+    model_dir = entry.get_model_dir(backend)
 
-    runner = runner_cls(
-        runner_path=str(entry.get_runner_path(backend)),
-        model_dir=entry.get_model_dir(backend),
-        backend=backend,
-    )
-    return runner, backend
+    if entry.runner_key == "voxtral-realtime":
+        runner = VoxtralRunner(
+            runner_path=str(entry.get_runner_path(backend)),
+            model_dir=model_dir,
+            backend=backend,
+        )
+        return runner, backend, "subprocess"
+
+    decoder = _get_decoder(entry.runner_key, model_dir)
+    return decoder, backend, "pybinding"
+
+
+def _load_audio_tensor(path: str) -> torch.Tensor:
+    with open(path, "rb") as f:
+        riff = f.read(4)
+        if riff != b"RIFF":
+            raise ValueError("Not a WAV file")
+        f.read(4)
+        f.read(4)
+        bits_per_sample = 16
+        data_bytes = b""
+        while True:
+            chunk_id = f.read(4)
+            if len(chunk_id) < 4:
+                break
+            chunk_size = struct.unpack("<I", f.read(4))[0]
+            if chunk_id == b"fmt ":
+                fmt_data = f.read(chunk_size)
+                bits_per_sample = struct.unpack("<H", fmt_data[14:16])[0]
+            elif chunk_id == b"data":
+                data_bytes = f.read(chunk_size)
+            else:
+                f.read(chunk_size)
+    if bits_per_sample == 16:
+        samples = struct.unpack(f"<{len(data_bytes)//2}h", data_bytes)
+        return torch.tensor(samples, dtype=torch.float32) / 32768.0
+    raise ValueError(f"Unsupported WAV: {bits_per_sample}bit")
 
 
 async def _save_upload(file: UploadFile) -> str:
-    """Save uploaded audio and convert to 16kHz mono WAV if needed."""
     suffix = Path(file.filename or "audio.wav").suffix or ".wav"
     tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
     content = await file.read()
@@ -79,23 +122,17 @@ async def _save_upload(file: UploadFile) -> str:
         return tmp.name
 
     if not shutil.which("ffmpeg"):
-        logger.warning("ffmpeg not found, passing raw file to runner")
         return tmp.name
 
     wav_path = tmp.name + ".wav"
     try:
         subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", tmp.name,
-                "-ar", "16000", "-ac", "1",
-                "-f", "wav", wav_path,
-            ],
+            ["ffmpeg", "-y", "-i", tmp.name, "-ar", "16000", "-ac", "1", "-f", "wav", wav_path],
             capture_output=True, check=True, timeout=30,
         )
         Path(tmp.name).unlink(missing_ok=True)
         return wav_path
-    except Exception as e:
-        logger.error(f"Audio conversion failed: {e}")
+    except Exception:
         Path(wav_path).unlink(missing_ok=True)
         return tmp.name
 
@@ -109,17 +146,17 @@ async def transcribe(
     temperature: float = Form(0.0),
     timestamp_granularities: str = Form("segment"),
 ):
-    runner, resolved_backend = _resolve_model(request, model, backend)
+    runner, resolved_backend, mode = _resolve_model(request, model, backend)
     audio_path = await _save_upload(file)
 
     try:
-        result: TranscriptionResult = runner.run(
-            audio_path,
-            temperature=temperature,
-            timestamps=timestamp_granularities,
-        )
-    except RuntimeError as e:
-        raise HTTPException(500, f"Runner error: {e}")
+        if mode == "pybinding":
+            audio = _load_audio_tensor(audio_path)
+            result: TranscriptionResult = runner.run(audio, temperature=temperature, timestamps=timestamp_granularities)
+        else:
+            result = runner.run(audio_path, temperature=temperature, timestamps=timestamp_granularities)
+    except Exception as e:
+        raise HTTPException(500, f"Inference error: {e}")
     finally:
         Path(audio_path).unlink(missing_ok=True)
 
@@ -127,6 +164,7 @@ async def transcribe(
         "text": result.text,
         "model": model,
         "backend": resolved_backend,
+        "mode": mode,
         "segments": result.segments,
         "performance": asdict(result.performance),
     }
@@ -140,13 +178,17 @@ async def diarize(
     backend: str | None = Form(None),
     threshold: float = Form(0.5),
 ):
-    runner, resolved_backend = _resolve_model(request, model, backend)
+    runner, resolved_backend, mode = _resolve_model(request, model, backend)
     audio_path = await _save_upload(file)
 
     try:
-        result: DiarizationResult = runner.run(audio_path, threshold=threshold)
-    except RuntimeError as e:
-        raise HTTPException(500, f"Runner error: {e}")
+        if mode == "pybinding":
+            audio = _load_audio_tensor(audio_path)
+            result: DiarizationResult = runner.run(audio, threshold=threshold)
+        else:
+            result = runner.run(audio_path, threshold=threshold)
+    except Exception as e:
+        raise HTTPException(500, f"Inference error: {e}")
     finally:
         Path(audio_path).unlink(missing_ok=True)
 
@@ -155,6 +197,7 @@ async def diarize(
         "num_speakers": result.num_speakers,
         "model": model,
         "backend": resolved_backend,
+        "mode": mode,
         "performance": asdict(result.performance),
     }
 
@@ -167,13 +210,17 @@ async def voice_activity_detection(
     backend: str | None = Form(None),
     threshold: float = Form(0.5),
 ):
-    runner, resolved_backend = _resolve_model(request, model, backend)
+    runner, resolved_backend, mode = _resolve_model(request, model, backend)
     audio_path = await _save_upload(file)
 
     try:
-        result: VadResult = runner.run(audio_path, threshold=threshold)
-    except RuntimeError as e:
-        raise HTTPException(500, f"Runner error: {e}")
+        if mode == "pybinding":
+            audio = _load_audio_tensor(audio_path)
+            result: VadResult = runner.run(audio, threshold=threshold)
+        else:
+            result = runner.run(audio_path, threshold=threshold)
+    except Exception as e:
+        raise HTTPException(500, f"Inference error: {e}")
     finally:
         Path(audio_path).unlink(missing_ok=True)
 
@@ -182,5 +229,6 @@ async def voice_activity_detection(
         "speech_ratio": result.speech_ratio,
         "model": model,
         "backend": resolved_backend,
+        "mode": mode,
         "performance": asdict(result.performance),
     }
