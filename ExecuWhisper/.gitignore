@@ -1,0 +1,6 @@
+ExecuWhisper.xcodeproj/
+docs/superpowers/
+
+# Local-only dictation samples and prompt-quality corpus.
+test_audio/
+evaluation/
