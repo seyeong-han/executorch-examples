@@ -59,3 +59,18 @@ extension RunnerError: LocalizedError {
         }
     }
 }
+
+extension RunnerError {
+    var isStickyUserActionError: Bool {
+        switch self {
+        case .accessibilityPermissionDenied,
+             .microphonePermissionDenied,
+             .binaryNotFound,
+             .modelMissing,
+             .runtimeLibraryMissing:
+            return true
+        default:
+            return false
+        }
+    }
+}

@@ -84,6 +84,19 @@ trap cleanup EXIT
 mkdir -p "${STAGING_DIR}"
 cp -R "${APP_PATH}" "${STAGING_DIR}/"
 ln -s /Applications "${STAGING_DIR}/Applications"
+cat > "${STAGING_DIR}/READ ME FIRST.txt" <<'EOF'
+ExecuWhisper internal install notes
+
+1. Drag ExecuWhisper.app to Applications.
+2. First launch may show a Gatekeeper warning because this internal build uses an Apple Development certificate.
+   Right-click ExecuWhisper.app and choose Open, then Open again.
+   If needed:
+     xattr -d com.apple.quarantine "/Applications/ExecuWhisper.app"
+3. Grant Microphone permission to ExecuWhisper.
+4. Grant Accessibility permission to ExecuWhisper Paste Helper when prompted. This enables auto-paste.
+5. The lightweight build downloads model files on first launch into:
+     ~/Library/Application Support/ExecuWhisper/models
+EOF
 
 hdiutil create -volname "${VOLUME_NAME}" -srcfolder "${STAGING_DIR}" -ov -format UDRW "${DMG_RW}" >/dev/null
 

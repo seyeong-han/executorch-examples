@@ -7,6 +7,7 @@
  */
 
 import AVFoundation
+import CoreAudio
 import Foundation
 import Testing
 
@@ -51,6 +52,34 @@ struct AudioRecorderTests {
         )
 
         #expect(resolved == nil)
+    }
+
+    @Test
+    func selectInputDeviceIDUsesExactUIDAndRequiresInputChannels() {
+        let records = [
+            AudioRecorder.CoreAudioDeviceRecord(
+                id: AudioDeviceID(100),
+                uid: "same-name-output",
+                name: "AirPods Pro",
+                inputChannelCount: 0
+            ),
+            AudioRecorder.CoreAudioDeviceRecord(
+                id: AudioDeviceID(101),
+                uid: "airpods-left",
+                name: "AirPods Pro",
+                inputChannelCount: 1
+            ),
+            AudioRecorder.CoreAudioDeviceRecord(
+                id: AudioDeviceID(102),
+                uid: "airpods-right",
+                name: "AirPods Pro",
+                inputChannelCount: 1
+            ),
+        ]
+
+        #expect(AudioRecorder.selectInputDeviceID(forUID: "airpods-right", from: records) == AudioDeviceID(102))
+        #expect(AudioRecorder.selectInputDeviceID(forUID: "same-name-output", from: records) == nil)
+        #expect(AudioRecorder.selectInputDeviceID(forUID: "missing", from: records) == nil)
     }
 
     @Test

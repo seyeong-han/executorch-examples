@@ -63,6 +63,40 @@ private func postPasteShortcut(targetPID: pid_t?) -> Int32 {
     return ExitCode.success
 }
 
+private func waitForLikelyTextTarget(targetPID: pid_t?, timeoutSeconds: TimeInterval = 1.0) {
+    guard let targetPID else { return }
+    let appElement = AXUIElementCreateApplication(targetPID)
+    let deadline = Date().addingTimeInterval(timeoutSeconds)
+    let textRoles: Set<String> = [
+        kAXTextFieldRole as String,
+        kAXTextAreaRole as String,
+        kAXComboBoxRole as String,
+    ]
+
+    while Date() < deadline {
+        var focused: CFTypeRef?
+        let focusedStatus = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedUIElementAttribute as CFString,
+            &focused
+        )
+        if focusedStatus == .success, let focused {
+            var role: CFTypeRef?
+            let roleStatus = AXUIElementCopyAttributeValue(
+                focused as! AXUIElement,
+                kAXRoleAttribute as CFString,
+                &role
+            )
+            if roleStatus == .success,
+               let roleString = role as? String,
+               textRoles.contains(roleString) {
+                return
+            }
+        }
+        usleep(50_000)
+    }
+}
+
 let arguments = Array(CommandLine.arguments.dropFirst())
 let shouldPrompt = arguments.contains("--prompt")
 
@@ -91,4 +125,5 @@ guard accessibilityTrusted(prompt: shouldPrompt) else {
     exit(ExitCode.accessibilityRequired)
 }
 
+waitForLikelyTextTarget(targetPID: targetPID(from: arguments))
 exit(postPasteShortcut(targetPID: targetPID(from: arguments)))

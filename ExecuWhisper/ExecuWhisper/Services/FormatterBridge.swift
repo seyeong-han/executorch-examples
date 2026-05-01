@@ -30,7 +30,7 @@ private final class FormatterDataAccumulator: @unchecked Sendable {
 
 private final class FormatterLineAccumulator: @unchecked Sendable {
     private let lock = NSLock()
-    private var buffer = ""
+    private var buffer = Data()
     private let lineHandler: @Sendable (String) -> Void
 
     init(lineHandler: @escaping @Sendable (String) -> Void) {
@@ -38,19 +38,19 @@ private final class FormatterLineAccumulator: @unchecked Sendable {
     }
 
     func append(_ chunk: Data) {
-        guard let text = String(data: chunk, encoding: .utf8), !text.isEmpty else {
-            return
-        }
-
         lock.lock()
-        buffer.append(text)
-        let parts = buffer.components(separatedBy: .newlines)
-        buffer = parts.last ?? ""
-        let readyLines = parts.dropLast()
+        buffer.append(chunk)
+        var readyLines: [Data] = []
+        while let newlineIndex = buffer.firstIndex(of: 10) {
+            let line = buffer.prefix(upTo: newlineIndex)
+            readyLines.append(Data(line))
+            buffer.removeSubrange(...newlineIndex)
+        }
         lock.unlock()
 
-        for line in readyLines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        for lineData in readyLines {
+            let trimmed = String(decoding: lineData, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 lineHandler(trimmed)
             }
@@ -59,10 +59,12 @@ private final class FormatterLineAccumulator: @unchecked Sendable {
 
     func flush() {
         lock.lock()
-        let remainder = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-        buffer = ""
+        let remainderData = buffer
+        buffer.removeAll()
         lock.unlock()
 
+        let remainder = String(decoding: remainderData, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if !remainder.isEmpty {
             lineHandler(remainder)
         }
@@ -136,6 +138,7 @@ actor FormatterBridge: FormatterBridgeClient {
     private var runtimeState: ResidencyState = .unloaded
     private var lastError: RunnerError?
     private var pendingRequest: PendingRequest?
+    private var pendingTimeoutTask: Task<Void, Never>?
     private var statusMessage = ""
 
     func runtimeSnapshot() -> RuntimeSnapshot {
@@ -161,7 +164,6 @@ actor FormatterBridge: FormatterBridgeClient {
             tokenizerPath: tokenizerPath,
             tokenizerConfigPath: tokenizerConfigPath
         )
-        try validate(configuration)
 
         if activeConfiguration != configuration {
             await shutdown()
@@ -171,6 +173,7 @@ actor FormatterBridge: FormatterBridgeClient {
             return
         }
 
+        try validate(configuration)
         if process?.isRunning != true || activeConfiguration != configuration {
             try launchHelper(configuration)
         }
@@ -202,6 +205,8 @@ actor FormatterBridge: FormatterBridgeClient {
         runtimeState = .unloaded
         statusMessage = ""
         lastError = nil
+        pendingTimeoutTask?.cancel()
+        pendingTimeoutTask = nil
     }
 
     func format(
@@ -326,8 +331,7 @@ actor FormatterBridge: FormatterBridgeClient {
     private func formatterEnvironment(modelPath: String) -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
         let bundleResources = Bundle.main.resourcePath ?? ""
-        let modelDirectory = URL(fileURLWithPath: modelPath).deletingLastPathComponent().path(percentEncoded: false)
-        var dyldEntries: [String] = [modelDirectory]
+        var dyldEntries: [String] = []
         if !bundleResources.isEmpty {
             dyldEntries.append(bundleResources)
         }
@@ -379,6 +383,7 @@ actor FormatterBridge: FormatterBridgeClient {
         let requestID = UUID().uuidString
         return try await withCheckedThrowingContinuation { continuation in
             pendingRequest = PendingRequest(requestID: requestID, continuation: continuation)
+            let timeoutSeconds = max(30, Int(ceil(Double(maxNewTokens) / 4.0)))
             let request = FormatterHelperProtocol.FormatRequest(
                 requestID: requestID,
                 prompt: prompt,
@@ -390,8 +395,9 @@ actor FormatterBridge: FormatterBridgeClient {
                 statusMessage = "Formatting..."
                 let requestData = try Self.encodeJSONLine(request)
                 try stdinHandle.write(contentsOf: requestData)
-                Task {
-                    try? await Task.sleep(for: .seconds(20))
+                pendingTimeoutTask?.cancel()
+                pendingTimeoutTask = Task {
+                    try? await Task.sleep(for: .seconds(timeoutSeconds))
                     await self.timeoutPendingRequest(requestID: requestID)
                 }
             } catch {
@@ -470,12 +476,16 @@ actor FormatterBridge: FormatterBridgeClient {
     private func finishPendingRequest(returning result: FormatResult) {
         guard let pendingRequest else { return }
         self.pendingRequest = nil
+        pendingTimeoutTask?.cancel()
+        pendingTimeoutTask = nil
         pendingRequest.continuation.resume(returning: result)
     }
 
     private func finishPendingRequest(throwing error: Error) {
         guard let pendingRequest else { return }
         self.pendingRequest = nil
+        pendingTimeoutTask?.cancel()
+        pendingTimeoutTask = nil
         pendingRequest.continuation.resume(throwing: error)
     }
 

@@ -153,6 +153,76 @@ struct TextPipelineTests {
     }
 
     @Test
+    func formatterAnsweringShortQuestionFallsBackToTranscript() async {
+        let sandbox = makeSandbox()
+        let replacementStore = ReplacementStore(fileURL: sandbox.appendingPathComponent("replacements.json"))
+        replacementStore.entries = []
+        let formatter = StubFormatterBridge(result: "Yes")
+        let pipeline = TextPipeline(
+            replacementStore: replacementStore,
+            formatterBridge: formatter,
+            formatterPathsProvider: formatterPaths
+        )
+
+        let result = await pipeline.process(
+            "is it raining?",
+            smartFormattingEnabled: true
+        )
+
+        #expect(result.outputText == "is it raining?")
+        #expect(result.tags == ["formatter-fallback"])
+    }
+
+    @Test
+    func formatterPromptExampleLeakFallsBackToTranscript() async {
+        let sandbox = makeSandbox()
+        let replacementStore = ReplacementStore(fileURL: sandbox.appendingPathComponent("replacements.json"))
+        replacementStore.entries = []
+        let formatter = StubFormatterBridge(result: """
+        Options:
+        - Does it feel like real-time processing?
+        - What is the next step?
+        - Okay, so the plan is finish the build, then deploy
+        """)
+        let pipeline = TextPipeline(
+            replacementStore: replacementStore,
+            formatterBridge: formatter,
+            formatterPathsProvider: formatterPaths
+        )
+
+        let result = await pipeline.process(
+            "Hello, can you hear me?",
+            smartFormattingEnabled: true
+        )
+
+        #expect(result.outputText == "Hello, can you hear me?")
+        #expect(result.tags == ["formatter-fallback"])
+    }
+
+    @Test
+    func longTranscriptSkipsFormatterBeforeContextOverflow() async {
+        let sandbox = makeSandbox()
+        let replacementStore = ReplacementStore(fileURL: sandbox.appendingPathComponent("replacements.json"))
+        replacementStore.entries = []
+        let formatter = StubFormatterBridge(result: "should not be used")
+        let pipeline = TextPipeline(
+            replacementStore: replacementStore,
+            formatterBridge: formatter,
+            formatterPathsProvider: formatterPaths
+        )
+        let longTranscript = Array(repeating: "context", count: 400).joined(separator: " ")
+
+        let result = await pipeline.process(
+            longTranscript,
+            smartFormattingEnabled: true
+        )
+
+        #expect(result.outputText == longTranscript)
+        #expect(result.tags == ["formatter-skipped-context"])
+        #expect(await formatter.prompts.isEmpty)
+    }
+
+    @Test
     func formatterMetadataEchoFallsBackToTranscript() async {
         let sandbox = makeSandbox()
         let replacementStore = ReplacementStore(fileURL: sandbox.appendingPathComponent("replacements.json"))

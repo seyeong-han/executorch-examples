@@ -46,7 +46,7 @@ private final class DataAccumulator: @unchecked Sendable {
 
 private final class LineAccumulator: @unchecked Sendable {
     private let lock = NSLock()
-    private var buffer = ""
+    private var buffer = Data()
     private let lineHandler: @Sendable (String) -> Void
 
     init(lineHandler: @escaping @Sendable (String) -> Void) {
@@ -54,19 +54,19 @@ private final class LineAccumulator: @unchecked Sendable {
     }
 
     func append(_ chunk: Data) {
-        guard let text = String(data: chunk, encoding: .utf8), !text.isEmpty else {
-            return
-        }
-
         lock.lock()
-        buffer.append(text)
-        let parts = buffer.components(separatedBy: .newlines)
-        buffer = parts.last ?? ""
-        let readyLines = parts.dropLast()
+        buffer.append(chunk)
+        var readyLines: [Data] = []
+        while let newlineIndex = buffer.firstIndex(of: 10) {
+            let line = buffer.prefix(upTo: newlineIndex)
+            readyLines.append(Data(line))
+            buffer.removeSubrange(...newlineIndex)
+        }
         lock.unlock()
 
-        for line in readyLines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        for lineData in readyLines {
+            let trimmed = String(decoding: lineData, as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 lineHandler(trimmed)
             }
@@ -75,10 +75,12 @@ private final class LineAccumulator: @unchecked Sendable {
 
     func flush() {
         lock.lock()
-        let remainder = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-        buffer = ""
+        let remainderData = buffer
+        buffer.removeAll()
         lock.unlock()
 
+        let remainder = String(decoding: remainderData, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if !remainder.isEmpty {
             lineHandler(remainder)
         }
@@ -315,8 +317,7 @@ actor RunnerBridge {
 
         var environment = ProcessInfo.processInfo.environment
         let bundleResources = Bundle.main.resourcePath ?? ""
-        let modelDirectory = URL(fileURLWithPath: configuration.modelPath).deletingLastPathComponent().path(percentEncoded: false)
-        var dyldEntries: [String] = [modelDirectory]
+        var dyldEntries: [String] = []
         if !bundleResources.isEmpty {
             dyldEntries.append(bundleResources)
         }

@@ -7,6 +7,7 @@
  */
 
 import Foundation
+import CryptoKit
 import os
 
 private let downloadLog = Logger(subsystem: "org.pytorch.executorch.ExecuWhisper", category: "ModelDownloader")
@@ -15,6 +16,24 @@ private struct DownloadAsset: Sendable {
     let fileName: String
     let url: URL
     let minimumBytes: Int64
+}
+
+private struct ModelManifest: Decodable, Sendable {
+    struct Asset: Decodable, Sendable {
+        let bytes: Int64
+        let sha256: String
+    }
+
+    let assets: [String: Asset]
+
+    static func load() -> Self? {
+        guard let url = Bundle.main.url(forResource: "model_manifest", withExtension: "json"),
+              let data = try? Data(contentsOf: url)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
 }
 
 private final class AssetDownloadDelegate: NSObject, URLSessionDownloadDelegate {
@@ -137,6 +156,7 @@ final class ModelDownloader {
 
     private let repoBaseURL = URL(string: "https://huggingface.co/younghan-meta/Parakeet-TDT-ExecuTorch-Metal/resolve/main/")!
     private let formatterRepoBaseURL = URL(string: "https://huggingface.co/younghan-meta/LFM2.5-ExecuTorch-MLX/resolve/main/")!
+    private let manifest = ModelManifest.load()
     private var activeDownload: ActiveDownload?
 
     var state: State = .idle
@@ -370,6 +390,21 @@ final class ModelDownloader {
                     description: "Downloaded file is unexpectedly small (\(size) bytes)."
                 )
             }
+            if let manifestAsset = manifest?.assets[asset.fileName] {
+                guard size == manifestAsset.bytes else {
+                    throw RunnerError.downloadFailed(
+                        file: asset.fileName,
+                        description: "Downloaded file size \(size) does not match expected size \(manifestAsset.bytes)."
+                    )
+                }
+                let digest = try sha256Hex(for: stagedURL)
+                guard digest == manifestAsset.sha256.lowercased() else {
+                    throw RunnerError.downloadFailed(
+                        file: asset.fileName,
+                        description: "Downloaded file checksum does not match expected SHA256."
+                    )
+                }
+            }
 
             let handle = try FileHandle(forReadingFrom: stagedURL)
             let headerData = try handle.read(upToCount: 256) ?? Data()
@@ -385,5 +420,20 @@ final class ModelDownloader {
                 )
             }
         }
+    }
+
+    private func sha256Hex(for url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        while autoreleasepool(invoking: {
+            let data = handle.readData(ofLength: 8 * 1024 * 1024)
+            guard !data.isEmpty else { return false }
+            hasher.update(data: data)
+            return true
+        }) {}
+
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }

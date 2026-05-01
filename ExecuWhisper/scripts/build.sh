@@ -34,11 +34,13 @@ APP_NAME="ExecuWhisper"
 
 DOWNLOAD_MODELS=false
 BUNDLE_MODELS=false
+CHECK_ONLY=false
 
 for arg in "$@"; do
   case "${arg}" in
     --download-models) DOWNLOAD_MODELS=true ;;
     --bundle-models) BUNDLE_MODELS=true ;;
+    --check) CHECK_ONLY=true ;;
     -h|--help)
       echo "Usage: ./scripts/build.sh [--download-models] [--bundle-models]"
       echo ""
@@ -47,6 +49,7 @@ for arg in "$@"; do
       echo "Options:"
       echo "  --download-models   Download Parakeet and LFM2.5 artifacts before building"
       echo "  --bundle-models     Copy ASR and formatter model artifacts into the app bundle"
+      echo "  --check             Verify generated project settings and exit"
       echo "  -h, --help          Show this help message"
       echo ""
       echo "Environment variables:"
@@ -174,6 +177,12 @@ xcodegen generate
 echo "Generated ${SCHEME}.xcodeproj"
 echo ""
 
+if [[ "${CHECK_ONLY}" == true ]]; then
+  echo "--- Step 3: Verifying project settings ---"
+  ./scripts/verify_project_settings.sh
+  exit 0
+fi
+
 echo "--- Step 3: Building app ---"
 mkdir -p "${BUILD_DIR}"
 BUILD_LOG="${BUILD_DIR}/build.log"
@@ -205,6 +214,65 @@ if [[ ! -d "${APP_PATH}" ]]; then
   echo "ERROR: Build succeeded but app not found at ${APP_PATH}" >&2
   echo "Full log: ${BUILD_LOG}" >&2
   exit 1
+fi
+
+SIGNING_IDENTITY="$(
+  xcodebuild \
+    -project "${SCHEME}.xcodeproj" \
+    -scheme "${SCHEME}" \
+    -configuration "${CONFIG}" \
+    -showBuildSettings 2>/dev/null \
+    | awk -F= '
+      /EXPANDED_CODE_SIGN_IDENTITY =/ { gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 != "") expanded=$2 }
+      /CODE_SIGN_IDENTITY =/ { gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 != "") identity=$2 }
+      END { if (expanded != "") print expanded; else if (identity != "") print identity }
+    '
+)"
+DEVELOPMENT_TEAM="$(
+  xcodebuild \
+    -project "${SCHEME}.xcodeproj" \
+    -scheme "${SCHEME}" \
+    -configuration "${CONFIG}" \
+    -showBuildSettings 2>/dev/null \
+    | awk -F= '/DEVELOPMENT_TEAM =/ { gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit }'
+)"
+
+if [[ "${SIGNING_IDENTITY}" == "Apple Development" && -n "${DEVELOPMENT_TEAM}" ]]; then
+  RESOLVED_IDENTITY="$(
+    security find-identity -v -p codesigning 2>/dev/null \
+      | awk -v team="(${DEVELOPMENT_TEAM})" '
+        index($0, team) && $0 !~ /CSSMERR/ {
+          sub(/^[[:space:]]*[0-9]+\)[[:space:]]*/, "", $0)
+          print $1
+          exit
+        }
+      '
+  )"
+  if [[ -n "${RESOLVED_IDENTITY}" ]]; then
+    SIGNING_IDENTITY="${RESOLVED_IDENTITY}"
+  fi
+fi
+if [[ "${SIGNING_IDENTITY}" == "Apple Development" ]]; then
+  RESOLVED_IDENTITY="$(
+    security find-identity -v -p codesigning 2>/dev/null \
+      | awk '
+        /Apple Development:/ && $0 !~ /CSSMERR/ {
+          sub(/^[[:space:]]*[0-9]+\)[[:space:]]*/, "", $0)
+          print $1
+          exit
+        }
+      '
+  )"
+  if [[ -n "${RESOLVED_IDENTITY}" ]]; then
+    SIGNING_IDENTITY="${RESOLVED_IDENTITY}"
+  fi
+fi
+
+if [[ -n "${SIGNING_IDENTITY}" && "${SIGNING_IDENTITY}" != "-" ]]; then
+  echo "--- Step 4: Signing bundled helpers ---"
+  ./scripts/sign_release.sh "${APP_PATH}" "${SIGNING_IDENTITY}"
+else
+  echo "--- Step 4: Skipping helper signing (ad-hoc or unsigned build) ---"
 fi
 
 echo "Built app: ${APP_PATH}"

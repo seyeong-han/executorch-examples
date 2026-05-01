@@ -131,8 +131,16 @@ struct SettingsView: View {
                 }
 
                 LabeledContent("Hotkey status") {
-                    Text(dictationManager.hotKeyStatusText)
-                        .foregroundStyle(dictationManager.hotKeyRegistrationError == nil ? Color.secondary : Color.orange)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(dictationManager.hotKeyStatusText)
+                            .foregroundStyle(dictationManager.hotKeyRegistrationError == nil ? Color.secondary : Color.orange)
+                        if dictationManager.hotKeyRegistrationError != nil {
+                            Text("Common conflicts: macOS input source switcher uses Ctrl-Space; Spotlight uses Cmd-Space.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
                 }
 
                 LabeledContent("Accessibility") {

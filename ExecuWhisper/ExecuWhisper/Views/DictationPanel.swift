@@ -31,8 +31,8 @@ final class DictationPanel: NSPanel {
         self.contentView = hosting
     }
 
-    func showCentered() {
-        guard let screen = NSScreen.main else { return }
+    func showCentered(on preferredScreen: NSScreen? = nil) {
+        guard let screen = preferredScreen ?? NSScreen.main else { return }
         let screenFrame = screen.visibleFrame
         let x = screenFrame.midX - frame.width / 2
         let y = screenFrame.midY - frame.height / 2 + 100

@@ -48,6 +48,13 @@ private final class NativeCaptureWriter: @unchecked Sendable {
 }
 
 actor AudioRecorder {
+    struct CoreAudioDeviceRecord: Equatable, Sendable {
+        let id: AudioDeviceID
+        let uid: String
+        let name: String
+        let inputChannelCount: UInt32
+    }
+
     struct InputDevice: Identifiable, Equatable, Sendable {
         let id: String
         let name: String
@@ -67,6 +74,10 @@ actor AudioRecorder {
     private static let postStopTailTrimDurationMs: Double = 256
     private var engine: AVAudioEngine?
     private var writer = NativeCaptureWriter()
+    private var selectedDeviceUID: String?
+    private var levelHandler: (@Sendable (Float) -> Void)?
+    private var configurationObserver: NSObjectProtocol?
+    private var isRecoveringConfiguration = false
 
     func startRecording(
         selectedMicrophoneID: String? = nil,
@@ -86,37 +97,26 @@ actor AudioRecorder {
             throw RunnerError.microphoneNotAvailable
         }
 
+        selectedDeviceUID = resolvedDevice.device.id
+        self.levelHandler = levelHandler
+
         let audioEngine = AVAudioEngine()
         let inputNode = audioEngine.inputNode
 
-        if let deviceID = Self.audioDeviceID(forDeviceNamed: resolvedDevice.device.name) {
-            try Self.bindEngineInput(inputNode: inputNode, to: deviceID)
-        }
-
-        let hwFormat = inputNode.outputFormat(forBus: 0)
-
-        log.info("Hardware audio format: \(hwFormat.sampleRate)Hz, \(hwFormat.channelCount)ch")
-
-        guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0 else {
+        guard let deviceID = Self.audioDeviceID(forUID: resolvedDevice.device.id) else {
+            log.error("Could not resolve Core Audio input device for uid=\(resolvedDevice.device.id, privacy: .public)")
             throw RunnerError.microphoneNotAvailable
         }
+        try Self.bindEngineInput(inputNode: inputNode, to: deviceID)
 
-        let captureWriter = writer
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { buffer, _ in
-            guard buffer.frameLength > 0 else { return }
-
-            if let channelData = buffer.floatChannelData {
-                var rms: Float = 0
-                vDSP_rmsqv(channelData[0], 1, &rms, vDSP_Length(buffer.frameLength))
-                levelHandler(rms)
-            }
-
-            do {
-                try captureWriter.append(buffer)
-            } catch {
-                log.error("Failed to write capture buffer: \(error.localizedDescription, privacy: .public)")
-            }
-        }
+        // Pass nil format so AVAudioEngine uses the bus's actual hardware format after
+        // we bound the AU to the chosen device. Caching outputFormat(forBus:) here used
+        // to capture a stale 48 kHz / 2-channel format from whatever device the engine
+        // momentarily latched onto before our bind, which then made `installTap` fail
+        // with "Format mismatch" + "config change pending!" on Macs whose mic runs at a
+        // different rate (e.g. 24 kHz). The buffer delivered to the tap carries its
+        // native format; ImportedAudioDecoder downstream resamples to 16 kHz mono.
+        installTap(on: inputNode, levelHandler: levelHandler)
 
         do {
             try audioEngine.start()
@@ -125,6 +125,10 @@ actor AudioRecorder {
             throw error
         }
         self.engine = audioEngine
+        observeConfigurationChanges(for: audioEngine)
+
+        let runtimeFormat = inputNode.inputFormat(forBus: 0)
+        log.info("Audio recording engine bound: device=\(resolvedDevice.device.name, privacy: .public) sampleRate=\(runtimeFormat.sampleRate) channelCount=\(runtimeFormat.channelCount)")
 
         if resolvedDevice.usedFallback {
             log.info("Selected microphone unavailable; falling back to system default '\(resolvedDevice.device.name, privacy: .public)'")
@@ -233,6 +237,10 @@ actor AudioRecorder {
     }
 
     private func stopCaptureOnly() {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+            self.configurationObserver = nil
+        }
         if let engine {
             engine.inputNode.removeTap(onBus: 0)
             if engine.isRunning {
@@ -241,13 +249,16 @@ actor AudioRecorder {
             engine.reset()
         }
         engine = nil
+        selectedDeviceUID = nil
+        levelHandler = nil
+        isRecoveringConfiguration = false
         log.info("Audio recording stopped")
     }
 
     private static func bindEngineInput(inputNode: AVAudioInputNode, to deviceID: AudioDeviceID) throws {
         guard let audioUnit = inputNode.audioUnit else {
             log.error("Input node has no audio unit; cannot bind to device id=\(deviceID)")
-            return
+            throw RunnerError.microphoneNotAvailable
         }
         var mutableID = deviceID
         let status = AudioUnitSetProperty(
@@ -264,7 +275,81 @@ actor AudioRecorder {
         }
     }
 
-    private static func audioDeviceID(forDeviceNamed name: String) -> AudioDeviceID? {
+    private func observeConfigurationChanges(for engine: AVAudioEngine) {
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            Task {
+                await self?.recoverFromConfigurationChange()
+            }
+        }
+    }
+
+    private func recoverFromConfigurationChange() async {
+        guard !isRecoveringConfiguration,
+              let engine,
+              let selectedDeviceUID,
+              let levelHandler
+        else {
+            return
+        }
+
+        isRecoveringConfiguration = true
+        defer { isRecoveringConfiguration = false }
+
+        do {
+            let inputNode = engine.inputNode
+            inputNode.removeTap(onBus: 0)
+            if engine.isRunning {
+                engine.stop()
+            }
+            guard let deviceID = Self.audioDeviceID(forUID: selectedDeviceUID) else {
+                log.error("Audio config change recovery failed: device uid unavailable uid=\(selectedDeviceUID, privacy: .public)")
+                return
+            }
+            try Self.bindEngineInput(inputNode: inputNode, to: deviceID)
+            installTap(on: inputNode, levelHandler: levelHandler)
+            try engine.start()
+            let runtimeFormat = inputNode.inputFormat(forBus: 0)
+            log.info("Audio recording config change recovered: uid=\(selectedDeviceUID, privacy: .public) sampleRate=\(runtimeFormat.sampleRate) channelCount=\(runtimeFormat.channelCount)")
+        } catch {
+            log.error("Audio config change recovery failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func installTap(
+        on inputNode: AVAudioInputNode,
+        levelHandler: @Sendable @escaping (Float) -> Void
+    ) {
+        let captureWriter = writer
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, _ in
+            guard buffer.frameLength > 0 else { return }
+
+            if let channelData = buffer.floatChannelData {
+                var rms: Float = 0
+                vDSP_rmsqv(channelData[0], 1, &rms, vDSP_Length(buffer.frameLength))
+                levelHandler(rms)
+            }
+
+            do {
+                try captureWriter.append(buffer)
+            } catch {
+                log.error("Failed to write capture buffer: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    static func selectInputDeviceID(forUID uid: String, from records: [CoreAudioDeviceRecord]) -> AudioDeviceID? {
+        records.first { $0.uid == uid && $0.inputChannelCount > 0 }?.id
+    }
+
+    static func audioDeviceID(forUID uid: String) -> AudioDeviceID? {
+        selectInputDeviceID(forUID: uid, from: coreAudioDeviceRecords())
+    }
+
+    static func coreAudioDeviceRecords() -> [CoreAudioDeviceRecord] {
         var size: UInt32 = 0
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -276,7 +361,7 @@ actor AudioRecorder {
             &address,
             0, nil,
             &size
-        ) == noErr, size > 0 else { return nil }
+        ) == noErr, size > 0 else { return [] }
 
         let count = Int(size) / MemoryLayout<AudioDeviceID>.size
         var deviceIDs = [AudioDeviceID](repeating: 0, count: count)
@@ -286,44 +371,62 @@ actor AudioRecorder {
             0, nil,
             &size,
             &deviceIDs
-        ) == noErr else { return nil }
+        ) == noErr else { return [] }
 
-        for deviceID in deviceIDs {
-            var nameSize: UInt32 = 0
-            var nameAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioObjectPropertyName,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            guard AudioObjectGetPropertyDataSize(deviceID, &nameAddress, 0, nil, &nameSize) == noErr else { continue }
-
-            var cfName: CFString = "" as CFString
-            var cfNameSize = UInt32(MemoryLayout<CFString>.size)
-            guard AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &cfNameSize, &cfName) == noErr else { continue }
-
-            if (cfName as String) == name {
-                var inputChannels: UInt32 = 0
-                var streamAddress = AudioObjectPropertyAddress(
-                    mSelector: kAudioDevicePropertyStreamConfiguration,
-                    mScope: kAudioObjectPropertyScopeInput,
-                    mElement: kAudioObjectPropertyElementMain
-                )
-                var streamSize: UInt32 = 0
-                if AudioObjectGetPropertyDataSize(deviceID, &streamAddress, 0, nil, &streamSize) == noErr,
-                   streamSize > 0 {
-                    let bufferListPointer = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(streamSize))
-                    defer { bufferListPointer.deallocate() }
-                    if AudioObjectGetPropertyData(deviceID, &streamAddress, 0, nil, &streamSize, bufferListPointer) == noErr {
-                        let bufferList = UnsafeMutableAudioBufferListPointer(bufferListPointer)
-                        for buf in bufferList {
-                            inputChannels += buf.mNumberChannels
-                        }
-                    }
-                }
-                if inputChannels > 0 { return deviceID }
+        return deviceIDs.compactMap { deviceID in
+            guard let uid = stringProperty(
+                deviceID: deviceID,
+                selector: kAudioDevicePropertyDeviceUID
+            ) else {
+                return nil
             }
+            let name = stringProperty(
+                deviceID: deviceID,
+                selector: kAudioObjectPropertyName
+            ) ?? uid
+            let inputChannels = inputChannelCount(for: deviceID)
+            return CoreAudioDeviceRecord(
+                id: deviceID,
+                uid: uid,
+                name: name,
+                inputChannelCount: inputChannels
+            )
         }
-        return nil
     }
 
+    private static func stringProperty(deviceID: AudioDeviceID, selector: AudioObjectPropertySelector) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value) == noErr else {
+            return nil
+        }
+        return value as String
+    }
+
+    private static func inputChannelCount(for deviceID: AudioDeviceID) -> UInt32 {
+        var streamAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioObjectPropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var streamSize: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(deviceID, &streamAddress, 0, nil, &streamSize) == noErr,
+              streamSize > 0
+        else {
+            return 0
+        }
+
+        let bufferListPointer = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: Int(streamSize))
+        defer { bufferListPointer.deallocate() }
+        guard AudioObjectGetPropertyData(deviceID, &streamAddress, 0, nil, &streamSize, bufferListPointer) == noErr else {
+            return 0
+        }
+        let bufferList = UnsafeMutableAudioBufferListPointer(bufferListPointer)
+        return bufferList.reduce(UInt32(0)) { $0 + $1.mNumberChannels }
+    }
 }

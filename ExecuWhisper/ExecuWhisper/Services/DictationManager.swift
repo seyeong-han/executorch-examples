@@ -13,6 +13,7 @@ import os
 import SwiftUI
 
 private let dictationLog = Logger(subsystem: "org.pytorch.executorch.ExecuWhisper", category: "DictationManager")
+private let maxDictationDuration: TimeInterval = 30 * 60
 
 @MainActor @Observable
 final class DictationManager {
@@ -62,6 +63,7 @@ final class DictationManager {
     private var silenceTimer: Task<Void, Never>?
     private var targetApp: NSRunningApplication?
     private var lastVoiceTime: Date = .now
+    private var dictationStartTime: Date?
     private var sawVoiceActivity = false
 
     init(
@@ -156,6 +158,7 @@ final class DictationManager {
         dictationLog.info("Captured target app=\(self.targetApp?.localizedName ?? "none", privacy: .public)")
         state = .listening
         lastVoiceTime = .now
+        dictationStartTime = .now
         sawVoiceActivity = false
         showPanel()
         startSilenceMonitor()
@@ -184,11 +187,17 @@ final class DictationManager {
         do {
             let result = try await store.finishDictationCapture()
             dictationLog.info("Dictation produced outputLength=\(result.outputText.count) rawLength=\(result.rawText.count) tags=\(result.tags, privacy: .public)")
-            dictationLog.info("Dictation raw: \(result.rawText, privacy: .public)")
-            dictationLog.info("Dictation final: \(result.outputText, privacy: .public)")
+            if DiagnosticLogging.shouldLogTranscriptsPublicly {
+                dictationLog.info("Dictation raw: \(result.rawText, privacy: .public)")
+                dictationLog.info("Dictation final: \(result.outputText, privacy: .public)")
+            } else {
+                dictationLog.info("Dictation raw: \(result.rawText, privacy: .private)")
+                dictationLog.info("Dictation final: \(result.outputText, privacy: .private)")
+            }
             defer {
                 dismissPanel()
                 state = .idle
+                dictationStartTime = nil
             }
 
             guard !result.outputText.isEmpty else { return }
@@ -219,16 +228,19 @@ final class DictationManager {
             dictationLog.info("Dictation stop ignored: no active recording (likely a duplicate trigger).")
             dismissPanel()
             state = .idle
+            dictationStartTime = nil
         } catch let error as RunnerError {
             dictationLog.error("Dictation failed with RunnerError: \(error.localizedDescription, privacy: .public)")
             store.currentError = error
             dismissPanel()
             state = .idle
+            dictationStartTime = nil
         } catch {
             dictationLog.error("Dictation failed with unexpected error: \(error.localizedDescription, privacy: .public)")
             store.currentError = .transcriptionFailed(description: error.localizedDescription)
             dismissPanel()
             state = .idle
+            dictationStartTime = nil
         }
     }
 
@@ -240,6 +252,13 @@ final class DictationManager {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(pollIntervalMs))
                 guard let self, self.state == .listening else { break }
+
+                if let dictationStartTime,
+                   Date.now.timeIntervalSince(dictationStartTime) >= maxDictationDuration {
+                    dictationLog.info("Maximum dictation duration reached; stopping automatically")
+                    self.requestStopAndPaste(trigger: "maximum duration")
+                    break
+                }
 
                 if store.audioLevel > Float(preferences.silenceThreshold) {
                     self.lastVoiceTime = .now
@@ -263,7 +282,7 @@ final class DictationManager {
             .environment(store)
             .environment(self)
         panel = DictationPanel(contentView: overlay)
-        panel?.showCentered()
+        panel?.showCentered(on: screenForTargetApp())
         dictationLog.info("Overlay panel created and presented")
     }
 
@@ -279,5 +298,26 @@ final class DictationManager {
             return PasteController.checkAccessibility(prompt: false)
         }
         return PasteController.checkAccessibility(prompt: false)
+    }
+
+    private func screenForTargetApp() -> NSScreen? {
+        guard let targetApp else { return nil }
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        guard let bounds = windows.first(where: { info in
+            (info[kCGWindowOwnerPID as String] as? pid_t) == targetApp.processIdentifier
+                && (info[kCGWindowLayer as String] as? Int) == 0
+        })?[kCGWindowBounds as String] as? [String: CGFloat],
+              let x = bounds["X"],
+              let y = bounds["Y"],
+              let width = bounds["Width"],
+              let height = bounds["Height"]
+        else {
+            return nil
+        }
+        let windowRect = CGRect(x: x, y: y, width: width, height: height)
+        return NSScreen.screens.first { $0.frame.intersects(windowRect) }
     }
 }

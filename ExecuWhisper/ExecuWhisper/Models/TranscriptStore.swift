@@ -55,9 +55,12 @@ final class TranscriptStore {
     private let sessionsURL: URL
     private let textPipeline: TextPipeline?
     private let audioDecoder: any ImportedAudioDecoding
+    private let maxRecordingDuration: TimeInterval
     private var recordingStartDate: Date?
     private var initialized = false
     private var warmupTask: Task<Void, Never>?
+    private var recordingLimitTask: Task<Void, Never>?
+    private var explicitlyUnloaded = false
 
     init(
         preferences: Preferences,
@@ -66,7 +69,8 @@ final class TranscriptStore {
         textPipeline: TextPipeline? = nil,
         audioDecoder: any ImportedAudioDecoding = ImportedAudioDecoder(),
         recorder: AudioRecorder = AudioRecorder(),
-        runner: any RunnerBridgeClient = RunnerBridge()
+        runner: any RunnerBridgeClient = RunnerBridge(),
+        maxRecordingDuration: TimeInterval = 30 * 60
     ) {
         self.recorder = recorder
         self.runner = runner
@@ -75,6 +79,7 @@ final class TranscriptStore {
         self.sessionsURL = sessionsURL
         self.textPipeline = textPipeline
         self.audioDecoder = audioDecoder
+        self.maxRecordingDuration = maxRecordingDuration
         loadSessions()
     }
 
@@ -230,10 +235,12 @@ final class TranscriptStore {
     }
 
     func preloadModel() async {
+        explicitlyUnloaded = false
         await performHelperWarmupIfNeeded(updateStatusMessage: true)
     }
 
     func unloadModel() async {
+        explicitlyUnloaded = true
         warmupTask?.cancel()
         warmupTask = nil
         await runner.shutdown()
@@ -279,6 +286,9 @@ final class TranscriptStore {
         currentError = nil
         sessionState = .recording
         recordingStartDate = .now
+        scheduleRecordingLimit {
+            await self.stopRecordingAndTranscribe()
+        }
 
         do {
             try await recorder.startRecording(selectedMicrophoneID: preferences.selectedMicrophoneID) { [weak self] level in
@@ -288,9 +298,11 @@ final class TranscriptStore {
             }
             startBackgroundWarmupIfNeeded()
         } catch let error as RunnerError {
+            cancelRecordingLimit()
             currentError = error
             sessionState = .idle
         } catch {
+            cancelRecordingLimit()
             currentError = .launchFailed(description: error.localizedDescription)
             sessionState = .idle
         }
@@ -344,11 +356,13 @@ final class TranscriptStore {
             storeLog.info("Dictation capture started")
             return true
         } catch let error as RunnerError {
+            cancelRecordingLimit()
             storeLog.error("Dictation capture failed to start: \(error.localizedDescription, privacy: .public)")
             currentError = error
             resetLiveState(status: "Ready")
             return false
         } catch {
+            cancelRecordingLimit()
             storeLog.error("Dictation capture failed with unexpected error: \(error.localizedDescription, privacy: .public)")
             currentError = .launchFailed(description: error.localizedDescription)
             resetLiveState(status: "Ready")
@@ -365,6 +379,7 @@ final class TranscriptStore {
         sessionState = .transcribing
         statusMessage = "Transcribing..."
         audioLevel = 0
+        cancelRecordingLimit()
         storeLog.info("Dictation capture stopping after duration=\(duration, format: .fixed(precision: 3))s")
 
         do {
@@ -388,6 +403,7 @@ final class TranscriptStore {
         sessionState = .transcribing
         statusMessage = "Finalizing recording..."
         audioLevel = 0
+        cancelRecordingLimit()
 
         do {
             let pcmData = try await recorder.stopRecording()
@@ -634,7 +650,11 @@ final class TranscriptStore {
             case .completed(let result):
                 finalResult = result
                 storeLog.info("Runner completed event textLength=\(result.text.count) stdoutLength=\(result.stdout.count) stderrLength=\(result.stderr.count)")
-                storeLog.info("Parakeet transcript: \(result.text, privacy: .public)")
+                if DiagnosticLogging.shouldLogTranscriptsPublicly {
+                    storeLog.info("Parakeet transcript: \(result.text, privacy: .public)")
+                } else {
+                    storeLog.info("Parakeet transcript: \(result.text, privacy: .private)")
+                }
                 if let runtimeProfile = result.runtimeProfile {
                     storeLog.info("Runner runtime profile: \(runtimeProfile, privacy: .public)")
                 }
@@ -659,6 +679,7 @@ final class TranscriptStore {
     }
 
     private func autoPreloadModelIfReady() async {
+        guard !explicitlyUnloaded else { return }
         guard resourcesReady else { return }
         guard helperState == .unloaded || helperState == .failed else { return }
         await performHelperWarmupIfNeeded(updateStatusMessage: false)
@@ -691,6 +712,7 @@ final class TranscriptStore {
             )
             helperState = .warm
             helperStatusMessage = "Model preloaded"
+            logResidentMemory(context: "Parakeet helper preloaded")
             if updateStatusMessage && !hasActiveSession {
                 statusMessage = "Ready"
             }
@@ -726,6 +748,15 @@ final class TranscriptStore {
         case .failed:
             helperStatusMessage = "Warmup failed"
         }
+    }
+
+    private func logResidentMemory(context: String) {
+        guard UserDefaults.standard.bool(forKey: DiagnosticLogging.transcriptDebugKey),
+              let bytes = DiagnosticLogging.residentMemoryBytes()
+        else {
+            return
+        }
+        storeLog.info("\(context, privacy: .public) residentMemoryBytes=\(bytes)")
     }
 
     @discardableResult
@@ -764,10 +795,28 @@ final class TranscriptStore {
     }
 
     private func resetLiveState(status: String = "Ready") {
+        cancelRecordingLimit()
         audioLevel = 0
         sessionState = .idle
         recordingStartDate = nil
         statusMessage = status
+    }
+
+    private func scheduleRecordingLimit(onLimit: @escaping @MainActor () async -> Void) {
+        cancelRecordingLimit()
+        guard maxRecordingDuration > 0 else { return }
+        recordingLimitTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(maxRecordingDuration))
+            guard let self, self.sessionState == .recording else { return }
+            self.statusMessage = "Maximum recording duration reached"
+            self.currentError = .transcriptionFailed(description: "Maximum recording duration reached.")
+            await onLimit()
+        }
+    }
+
+    private func cancelRecordingLimit() {
+        recordingLimitTask?.cancel()
+        recordingLimitTask = nil
     }
 
     private var formatterAssetsReady: Bool {

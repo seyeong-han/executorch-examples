@@ -46,12 +46,15 @@ targets:
           - "Resources/**"
           - "Support/PasteHelper/**"
       - path: ExecuWhisper/Resources/Assets.xcassets
+      - path: ExecuWhisper/Resources/model_manifest.json
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.pytorch.executorch.ExecuWhisper
         PRODUCT_NAME: ExecuWhisper
         INFOPLIST_FILE: ExecuWhisper/Info.plist
         CODE_SIGN_ENTITLEMENTS: ExecuWhisper/ExecuWhisper.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: XSDG2DKA58
         EXECUTORCH_PATH: /Users/younghan/executorch
         PARAKEET_HELPER_PATH: /Users/younghan/project/executorch/cmake-out/examples/models/parakeet/parakeet_helper
         FORMATTER_HELPER_PATH: /Users/younghan/executorch/cmake-out/examples/models/llama/lfm25_formatter_helper
@@ -188,6 +191,7 @@ targets:
       - path: ExecuWhisper/Utilities/SessionHistory.swift
       - path: ExecuWhisper/Utilities/SessionExportFormat.swift
       - path: ExecuWhisper/Utilities/RunnerError.swift
+      - path: ExecuWhisper/Utilities/DiagnosticLogging.swift
       - path: ExecuWhisper/Services/AudioRecorder.swift
       - path: ExecuWhisper/Services/DictationManager.swift
       - path: ExecuWhisper/Services/FormatterBridge.swift

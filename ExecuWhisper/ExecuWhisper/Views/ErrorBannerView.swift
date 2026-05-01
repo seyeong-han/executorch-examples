@@ -34,6 +34,13 @@ struct ErrorBannerView: View {
             .background(.red.gradient, in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            .task(id: error.localizedDescription) {
+                guard !error.isStickyUserActionError else { return }
+                try? await Task.sleep(for: .seconds(5))
+                if store.currentError?.localizedDescription == error.localizedDescription {
+                    store.clearError()
+                }
+            }
         }
     }
 }
