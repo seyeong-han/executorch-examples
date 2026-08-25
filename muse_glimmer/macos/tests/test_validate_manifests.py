@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+from copy import deepcopy
+
+import pytest
+
+from scripts import validate_manifests
+
+
+@pytest.fixture
+def compatibility() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "status": "development-gated",
+        "platform": "macos-arm64",
+        "executorch": {
+            "repository": "https://github.com/pytorch/executorch.git",
+            "commit": None,
+            "required_capabilities": [
+                "parakeet_persistent_helper",
+                "muse_glimmer_dflash_mlx",
+                "supports_cancel",
+                "supertonic_server_jsonl",
+            ],
+            "gates": {
+                "supertonic_runtime": {
+                    "status": "landed",
+                    "pull_request": "https://github.com/pytorch/executorch/pull/22063",
+                    "commit": "81969a92dd2e5515fa23ccdf9d87346cf3ba2ba2",
+                },
+                "supports_cancel": {
+                    "status": "pending",
+                    "pull_request": "https://github.com/pytorch/executorch/pull/22070",
+                    "commit": None,
+                },
+                "supertonic_server_jsonl": {
+                    "status": "unsubmitted",
+                    "pull_request": None,
+                    "commit": None,
+                },
+            },
+        },
+        "ready_for_release": False,
+    }
+
+
+def _gates(compatibility: dict[str, object]) -> dict[str, dict[str, object]]:
+    executorch = compatibility["executorch"]
+    assert isinstance(executorch, dict)
+    gates = executorch["gates"]
+    assert isinstance(gates, dict)
+    return gates  # type: ignore[return-value]
+
+
+def test_accepts_development_gated_capabilities(compatibility: dict[str, object]) -> None:
+    validate_manifests._validate_compatibility(compatibility)
+
+
+def test_landed_gate_requires_commit(compatibility: dict[str, object]) -> None:
+    value = deepcopy(compatibility)
+    _gates(value)["supertonic_runtime"]["commit"] = None
+
+    with pytest.raises(RuntimeError, match="landed compatibility gate requires a commit"):
+        validate_manifests._validate_compatibility(value)
+
+
+def test_unlanded_gate_rejects_commit(compatibility: dict[str, object]) -> None:
+    value = deepcopy(compatibility)
+    _gates(value)["supports_cancel"]["commit"] = "a" * 40
+
+    with pytest.raises(RuntimeError, match="unlanded compatibility gate cannot have a commit"):
+        validate_manifests._validate_compatibility(value)
+
+
+def test_release_ready_rejects_unlanded_gate(compatibility: dict[str, object]) -> None:
+    value = deepcopy(compatibility)
+    value["ready_for_release"] = True
+    executorch = value["executorch"]
+    assert isinstance(executorch, dict)
+    executorch["commit"] = "b" * 40
+
+    with pytest.raises(RuntimeError, match="unlanded gates"):
+        validate_manifests._validate_compatibility(value)
+
+
+def test_release_ready_requires_checkout_ancestry_verification(
+    compatibility: dict[str, object],
+) -> None:
+    value = deepcopy(compatibility)
+    value["ready_for_release"] = True
+    executorch = value["executorch"]
+    assert isinstance(executorch, dict)
+    executorch["commit"] = "b" * 40
+    for gate in _gates(value).values():
+        gate["status"] = "landed"
+        gate["commit"] = "a" * 40
+
+    with pytest.raises(RuntimeError, match="requires checkout ancestry verification"):
+        validate_manifests._validate_compatibility(value)
+
+
+def test_release_ready_verifies_all_landed_gate_commits(
+    compatibility: dict[str, object], tmp_path, monkeypatch
+) -> None:
+    value = deepcopy(compatibility)
+    value["ready_for_release"] = True
+    executorch = value["executorch"]
+    assert isinstance(executorch, dict)
+    executorch["commit"] = "b" * 40
+    for index, gate in enumerate(_gates(value).values(), start=1):
+        gate["status"] = "landed"
+        gate["commit"] = str(index) * 40
+    calls = []
+    monkeypatch.setattr(
+        validate_manifests,
+        "validate_executorch_checkout",
+        lambda checkout, commit, *, required_ancestors: calls.append(
+            (checkout, commit, required_ancestors)
+        ),
+    )
+
+    validate_manifests._validate_compatibility(value, release_checkout=tmp_path)
+
+    assert calls == [(tmp_path, "b" * 40, ("1" * 40, "2" * 40, "3" * 40))]

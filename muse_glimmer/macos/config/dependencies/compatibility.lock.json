@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "status": "development-gated",
+  "platform": "macos-arm64",
+  "executorch": {
+    "repository": "https://github.com/pytorch/executorch.git",
+    "commit": null,
+    "required_capabilities": [
+      "parakeet_persistent_helper",
+      "muse_glimmer_dflash_mlx",
+      "supports_cancel",
+      "supertonic_server_jsonl"
+    ],
+    "gates": {
+      "supertonic_runtime": {
+        "status": "landed",
+        "pull_request": "https://github.com/pytorch/executorch/pull/22063",
+        "commit": "81969a92dd2e5515fa23ccdf9d87346cf3ba2ba2"
+      },
+      "supports_cancel": {
+        "status": "pending",
+        "pull_request": "https://github.com/pytorch/executorch/pull/22070",
+        "commit": null
+      },
+      "supertonic_server_jsonl": {
+        "status": "unsubmitted",
+        "pull_request": null,
+        "commit": null,
+        "blocker": "Protocol v1 ready frame must report sample_rate 44100."
+      }
+    }
+  },
+  "livekit": {
+    "agents_requirement": ">=1.6.9,<2",
+    "server_requirement": ">=1.9,<2"
+  },
+  "ready_for_release": false,
+  "release_blocker": "Land every required capability and select one verified descendant ExecuTorch commit."
+}
