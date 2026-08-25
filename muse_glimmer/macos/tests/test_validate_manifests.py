@@ -122,3 +122,24 @@ def test_release_ready_verifies_all_landed_gate_commits(
     validate_manifests._validate_compatibility(value, release_checkout=tmp_path)
 
     assert calls == [(tmp_path, "b" * 40, ("1" * 40, "2" * 40, "3" * 40))]
+
+
+def test_executorch_artifact_revision_must_match_final_commit() -> None:
+    artifact = {
+        "role": "supertonic_runner",
+        "source": "executorch",
+        "revision": "a" * 40,
+        "sha256": "c" * 64,
+        "size_bytes": 1,
+        "license": "BSD-3-Clause",
+    }
+
+    with pytest.raises(RuntimeError, match="must match the final compatibility commit"):
+        validate_manifests._validate_release_artifacts([artifact], "b" * 40)
+
+    artifact["revision"] = "b" * 40
+    validate_manifests._validate_release_artifacts([artifact], "b" * 40)
+
+    artifact["source"] = "other"
+    with pytest.raises(RuntimeError, match="runtime artifact has invalid source"):
+        validate_manifests._validate_release_artifacts([artifact], "b" * 40)

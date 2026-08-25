@@ -25,6 +25,12 @@ _GIT_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _REQUIRED_CAPABILITIES = {"supports_cancel", "supertonic_server_jsonl"}
 _REQUIRED_GATES = {"supertonic_runtime", "supports_cancel", "supertonic_server_jsonl"}
 _GATE_STATUSES = {"landed", "pending", "unsubmitted"}
+_EXECUTORCH_REPOSITORY = "https://github.com/pytorch/executorch.git"
+_EXECUTORCH_ARTIFACT_ROLES = {
+    "parakeet_helper",
+    "muse_glimmer_worker",
+    "supertonic_runner",
+}
 
 
 def _load(path: Path) -> dict[str, object]:
@@ -98,6 +104,8 @@ def _validate_compatibility(
     executorch = compatibility.get("executorch")
     if not isinstance(executorch, dict):
         raise RuntimeError("compatibility lock has no ExecuTorch configuration")
+    if executorch.get("repository") != _EXECUTORCH_REPOSITORY:
+        raise RuntimeError("compatibility lock must use the official ExecuTorch repository")
     capabilities = executorch.get("required_capabilities")
     if not isinstance(capabilities, list) or not set(capabilities) >= _REQUIRED_CAPABILITIES:
         raise RuntimeError("compatibility lock omits required runtime capabilities")
@@ -146,6 +154,28 @@ def _validate_compatibility(
         )
 
 
+def _validate_release_artifacts(artifacts: object, final_executorch_commit: object) -> None:
+    if not isinstance(artifacts, list) or not isinstance(final_executorch_commit, str):
+        raise RuntimeError("release-ready artifact validation requires an ExecuTorch commit")
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            raise RuntimeError("release-ready artifact entries must be objects")
+        role = artifact.get("role")
+        if not all(artifact.get(field) for field in ("source", "revision", "sha256")):
+            raise RuntimeError(f"release-ready artifact provenance is incomplete: {role}")
+        if artifact.get("size_bytes") is None or str(artifact.get("license", "")).startswith(
+            "See "
+        ):
+            raise RuntimeError(f"release-ready artifact metadata is incomplete: {role}")
+        source = artifact.get("source")
+        if role in _EXECUTORCH_ARTIFACT_ROLES and source != "executorch":
+            raise RuntimeError(f"ExecuTorch runtime artifact has invalid source: {role}")
+        if source == "executorch" and artifact.get("revision") != final_executorch_commit:
+            raise RuntimeError(
+                f"ExecuTorch-built artifact must match the final compatibility commit: {role}"
+            )
+
+
 def main() -> int:
     _validate_artifacts()
     schema = _load(ROOT / "artifacts/manifest.schema.json")
@@ -165,15 +195,10 @@ def main() -> int:
         )
     _validate_compatibility(compatibility, release_checkout=release_checkout)
     if compatibility.get("ready_for_release"):
-        for artifact in _load(ARTIFACT_LOCK)["artifacts"]:
-            if not all(artifact.get(field) for field in ("source", "revision", "sha256")):
-                raise RuntimeError(
-                    f"release-ready artifact provenance is incomplete: {artifact['role']}"
-                )
-            if artifact.get("size_bytes") is None or str(artifact["license"]).startswith("See "):
-                raise RuntimeError(
-                    f"release-ready artifact metadata is incomplete: {artifact['role']}"
-                )
+        _validate_release_artifacts(
+            _load(ARTIFACT_LOCK)["artifacts"],
+            compatibility["executorch"].get("commit"),
+        )
 
     toolchain = _load(TOOLCHAIN_LOCK)
     if toolchain.get("platform") != {"system": "Darwin", "machine": "arm64"}:

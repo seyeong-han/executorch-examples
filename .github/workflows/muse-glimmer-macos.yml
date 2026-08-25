@@ -43,6 +43,35 @@ jobs:
         run: uv run --all-packages --all-groups ruff format --check .
       - name: Run Python tests
         run: uv run --all-packages --all-groups pytest
+      - name: Read release compatibility state
+        id: compatibility
+        run: |
+          uv run --all-packages --all-groups python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import re
+          from pathlib import Path
+
+          compatibility = json.loads(
+              Path("config/dependencies/compatibility.lock.json").read_text()
+          )
+          ready = bool(compatibility["ready_for_release"])
+          commit = compatibility["executorch"]["commit"] or ""
+          if ready and re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+              raise SystemExit("release-ready compatibility requires a full commit SHA")
+          print(f"ready={str(ready).lower()}")
+          print(f"commit={commit}")
+          PY
+      - name: Check out release ExecuTorch revision
+        if: steps.compatibility.outputs.ready == 'true'
+        env:
+          EXECUTORCH_COMMIT: ${{ steps.compatibility.outputs.commit }}
+        run: |
+          test -n "$EXECUTORCH_COMMIT"
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/pytorch/executorch.git \
+            "$RUNNER_TEMP/executorch"
+          git -C "$RUNNER_TEMP/executorch" checkout --detach "$EXECUTORCH_COMMIT"
+          echo "GLIMMER_EXECUTORCH_ROOT=$RUNNER_TEMP/executorch" >> "$GITHUB_ENV"
       - name: Validate manifests
         run: uv run --all-packages --all-groups python -m scripts.validate_manifests
       - name: Check publication contents

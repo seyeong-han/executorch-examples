@@ -434,7 +434,12 @@ def _attach_provider_reporting(
 ) -> None:
     def metrics(stage: str, event: object) -> None:
         payload = event.model_dump(mode="json") if hasattr(event, "model_dump") else str(event)
-        reporter.emit("provider_metrics", stage=stage, metrics=payload, message=stage)
+        reporter.emit(
+            "provider_metrics",
+            stage=stage,
+            metrics=_redact_payload(payload, config),
+            message=stage,
+        )
 
     def error(stage: str, event: object) -> None:
         exception = getattr(event, "error", RuntimeError(str(event)))
@@ -455,6 +460,21 @@ def _attach_provider_reporting(
             continue
         provider.on("metrics_collected", lambda event, stage=stage: metrics(stage, event))
         provider.on("error", lambda event, stage=stage: error(stage, event))
+
+
+def _redact_payload(value: object, config: GlimmerConfig | None) -> object:
+    if isinstance(value, str):
+        return _redact_text(value, config)
+    if isinstance(value, dict):
+        return {
+            _redact_text(str(key), config): _redact_payload(item, config)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact_payload(item, config) for item in value]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return _redact_text(str(value), config)
 
 
 def _redact_text(value: str, config: GlimmerConfig | None) -> str:
