@@ -23,10 +23,10 @@
         "commit": "5bd86e50fcd986999e4c09b82de040a3ba224466"
       },
       "supertonic_server_jsonl": {
-        "status": "unsubmitted",
-        "pull_request": null,
+        "status": "pending",
+        "pull_request": "https://github.com/pytorch/executorch/pull/22208",
         "commit": null,
-        "blocker": "Protocol v1 ready frame must report sample_rate 44100."
+        "blocker": "Merge the protocol-v1 server with a ready frame that reports sample_rate 44100."
       }
     }
   },

@@ -12,9 +12,10 @@ commit contains every required interface.
 - ExecuTorch PR [#22070](https://github.com/pytorch/executorch/pull/22070):
   bounded generic LLM worker cancellation and health propagation landed at
   `5bd86e50fcd986999e4c09b82de040a3ba224466`.
-- Persistent Supertonic JSONL mode: the follow-up is not submitted yet. Its
-  protocol-v1 ready frame must report `sample_rate: 44100` together with load
-  and warmup timing so the Python adapter and native runtime enforce one schema.
+- ExecuTorch PR [#22208](https://github.com/pytorch/executorch/pull/22208):
+  persistent Supertonic JSONL mode is pending review. Its protocol-v1 ready
+  frame reports `sample_rate: 44100` together with load and warmup timing so the
+  Python adapter and native runtime enforce one schema.
 
 The merged base Supertonic runtime alone is not a release pin. A temporary
 public PR commit may be used for local development only when it is pinned by
