@@ -10,8 +10,8 @@ commit contains every required interface.
   base Supertonic export and native runtime landed at
   `81969a92dd2e5515fa23ccdf9d87346cf3ba2ba2`.
 - ExecuTorch PR [#22070](https://github.com/pytorch/executorch/pull/22070):
-  bounded generic LLM worker cancellation and health propagation are pending
-  merge. The application will record the public landed commit after merge.
+  bounded generic LLM worker cancellation and health propagation landed at
+  `5bd86e50fcd986999e4c09b82de040a3ba224466`.
 - Persistent Supertonic JSONL mode: the follow-up is not submitted yet. Its
   protocol-v1 ready frame must report `sample_rate: 44100` together with load
   and warmup timing so the Python adapter and native runtime enforce one schema.

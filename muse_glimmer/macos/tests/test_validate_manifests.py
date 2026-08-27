@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from scripts import validate_manifests
+from scripts.repository import landed_gate_commits
 
 
 @pytest.fixture
@@ -29,9 +30,9 @@ def compatibility() -> dict[str, object]:
                     "commit": "81969a92dd2e5515fa23ccdf9d87346cf3ba2ba2",
                 },
                 "supports_cancel": {
-                    "status": "pending",
+                    "status": "landed",
                     "pull_request": "https://github.com/pytorch/executorch/pull/22070",
-                    "commit": None,
+                    "commit": "5bd86e50fcd986999e4c09b82de040a3ba224466",
                 },
                 "supertonic_server_jsonl": {
                     "status": "unsubmitted",
@@ -54,6 +55,10 @@ def _gates(compatibility: dict[str, object]) -> dict[str, dict[str, object]]:
 
 def test_accepts_development_gated_capabilities(compatibility: dict[str, object]) -> None:
     validate_manifests._validate_compatibility(compatibility)
+    assert landed_gate_commits(compatibility) == (
+        "5bd86e50fcd986999e4c09b82de040a3ba224466",
+        "81969a92dd2e5515fa23ccdf9d87346cf3ba2ba2",
+    )
 
 
 def test_landed_gate_requires_commit(compatibility: dict[str, object]) -> None:
@@ -66,7 +71,7 @@ def test_landed_gate_requires_commit(compatibility: dict[str, object]) -> None:
 
 def test_unlanded_gate_rejects_commit(compatibility: dict[str, object]) -> None:
     value = deepcopy(compatibility)
-    _gates(value)["supports_cancel"]["commit"] = "a" * 40
+    _gates(value)["supertonic_server_jsonl"]["commit"] = "a" * 40
 
     with pytest.raises(RuntimeError, match="unlanded compatibility gate cannot have a commit"):
         validate_manifests._validate_compatibility(value)

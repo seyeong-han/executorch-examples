@@ -18,9 +18,9 @@
         "commit": "81969a92dd2e5515fa23ccdf9d87346cf3ba2ba2"
       },
       "supports_cancel": {
-        "status": "pending",
+        "status": "landed",
         "pull_request": "https://github.com/pytorch/executorch/pull/22070",
-        "commit": null
+        "commit": "5bd86e50fcd986999e4c09b82de040a3ba224466"
       },
       "supertonic_server_jsonl": {
         "status": "unsubmitted",
@@ -35,5 +35,5 @@
     "server_requirement": ">=1.9,<2"
   },
   "ready_for_release": false,
-  "release_blocker": "Land every required capability and select one verified descendant ExecuTorch commit."
+  "release_blocker": "Land the persistent Supertonic JSONL protocol and select one verified descendant ExecuTorch commit."
 }
