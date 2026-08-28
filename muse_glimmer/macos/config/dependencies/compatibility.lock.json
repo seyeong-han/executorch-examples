@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "status": "development-gated",
+  "status": "artifact-gated",
   "platform": "macos-arm64",
   "executorch": {
     "repository": "https://github.com/pytorch/executorch.git",
-    "commit": null,
+    "commit": "20ad5ee43ff53804030899d621590af3daadda53",
     "required_capabilities": [
       "parakeet_persistent_helper",
       "muse_glimmer_dflash_mlx",
@@ -23,10 +23,9 @@
         "commit": "5bd86e50fcd986999e4c09b82de040a3ba224466"
       },
       "supertonic_server_jsonl": {
-        "status": "pending",
+        "status": "landed",
         "pull_request": "https://github.com/pytorch/executorch/pull/22208",
-        "commit": null,
-        "blocker": "Merge the protocol-v1 server with a ready frame that reports sample_rate 44100."
+        "commit": "20ad5ee43ff53804030899d621590af3daadda53"
       }
     }
   },
@@ -35,5 +34,5 @@
     "server_requirement": ">=1.9,<2"
   },
   "ready_for_release": false,
-  "release_blocker": "Land the persistent Supertonic JSONL protocol and select one verified descendant ExecuTorch commit."
+  "release_blocker": "Populate final artifact provenance and pass clean-machine macOS arm64 end-to-end validation."
 }

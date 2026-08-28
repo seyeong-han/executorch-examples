@@ -12,7 +12,8 @@ under their upstream terms, place them at the documented destination, and run:
 make prepare-artifacts
 ```
 
-Preparation accepts only the one ExecuTorch commit in
+Preparation accepts only ExecuTorch
+`20ad5ee43ff53804030899d621590af3daadda53` selected in
 `config/dependencies/compatibility.lock.json`, rejects a dirty or mismatched
 checkout, validates all files, and writes `.local/state/prepared.json`.
 Startup verifies that receipt and every checksum. It never installs, builds,

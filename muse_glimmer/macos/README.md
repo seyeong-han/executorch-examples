@@ -18,10 +18,12 @@ No LiveKit Cloud account or cloud inference service is used.
 
 ## Status
 
-The public source repository is ready for development, but the native
-compatibility lock is intentionally gated. A release pin requires one
-ExecuTorch commit containing both bounded MuseGlimmer worker cancellation and
-persistent Supertonic JSONL mode. See `docs/upstream-pins.md`.
+The native compatibility pin is ExecuTorch
+`20ad5ee43ff53804030899d621590af3daadda53`, which contains the landed
+Supertonic runtime, bounded MuseGlimmer worker cancellation, and persistent
+Supertonic JSONL mode. Release readiness remains false until final artifact
+provenance and clean-machine macOS arm64 end-to-end validation are complete.
+See `docs/upstream-pins.md`.
 
 ## Supported platform
 
@@ -50,18 +52,18 @@ make check
 make test
 ```
 
-Runtime provisioning remains intentionally unavailable while the compatibility
-commit is null:
+With a clean ExecuTorch checkout at the locked commit, run:
 
 ```bash
 make bootstrap
 make prepare-artifacts
 ```
 
-Once the release gate is resolved, `make bootstrap` validates the locked toolchain
-and installs source dependencies. `make prepare-artifacts` validates the single
-pinned ExecuTorch checkout and every model/native artifact, then writes an ignored
-compatibility receipt. Neither operation runs during normal startup.
+`make bootstrap` validates the locked toolchain and installs source
+dependencies. `make prepare-artifacts` validates the single pinned ExecuTorch
+checkout and every model/native artifact, then writes an ignored compatibility
+receipt. It does not download, build, export, or repair missing artifacts.
+Neither operation runs during normal startup.
 
 ## Daily development
 

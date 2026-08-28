@@ -12,11 +12,11 @@ from scripts.repository import landed_gate_commits
 def compatibility() -> dict[str, object]:
     return {
         "schema_version": 1,
-        "status": "development-gated",
+        "status": "artifact-gated",
         "platform": "macos-arm64",
         "executorch": {
             "repository": "https://github.com/pytorch/executorch.git",
-            "commit": None,
+            "commit": "20ad5ee43ff53804030899d621590af3daadda53",
             "required_capabilities": [
                 "parakeet_persistent_helper",
                 "muse_glimmer_dflash_mlx",
@@ -35,9 +35,9 @@ def compatibility() -> dict[str, object]:
                     "commit": "5bd86e50fcd986999e4c09b82de040a3ba224466",
                 },
                 "supertonic_server_jsonl": {
-                    "status": "unsubmitted",
-                    "pull_request": None,
-                    "commit": None,
+                    "status": "landed",
+                    "pull_request": "https://github.com/pytorch/executorch/pull/22208",
+                    "commit": "20ad5ee43ff53804030899d621590af3daadda53",
                 },
             },
         },
@@ -53,9 +53,10 @@ def _gates(compatibility: dict[str, object]) -> dict[str, dict[str, object]]:
     return gates  # type: ignore[return-value]
 
 
-def test_accepts_development_gated_capabilities(compatibility: dict[str, object]) -> None:
+def test_accepts_artifact_gated_capabilities(compatibility: dict[str, object]) -> None:
     validate_manifests._validate_compatibility(compatibility)
     assert landed_gate_commits(compatibility) == (
+        "20ad5ee43ff53804030899d621590af3daadda53",
         "5bd86e50fcd986999e4c09b82de040a3ba224466",
         "81969a92dd2e5515fa23ccdf9d87346cf3ba2ba2",
     )
@@ -71,7 +72,9 @@ def test_landed_gate_requires_commit(compatibility: dict[str, object]) -> None:
 
 def test_unlanded_gate_rejects_commit(compatibility: dict[str, object]) -> None:
     value = deepcopy(compatibility)
-    _gates(value)["supertonic_server_jsonl"]["commit"] = "a" * 40
+    gate = _gates(value)["supertonic_server_jsonl"]
+    gate["status"] = "pending"
+    gate["commit"] = "a" * 40
 
     with pytest.raises(RuntimeError, match="unlanded compatibility gate cannot have a commit"):
         validate_manifests._validate_compatibility(value)
@@ -80,9 +83,9 @@ def test_unlanded_gate_rejects_commit(compatibility: dict[str, object]) -> None:
 def test_release_ready_rejects_unlanded_gate(compatibility: dict[str, object]) -> None:
     value = deepcopy(compatibility)
     value["ready_for_release"] = True
-    executorch = value["executorch"]
-    assert isinstance(executorch, dict)
-    executorch["commit"] = "b" * 40
+    gate = _gates(value)["supertonic_server_jsonl"]
+    gate["status"] = "pending"
+    gate["commit"] = None
 
     with pytest.raises(RuntimeError, match="unlanded gates"):
         validate_manifests._validate_compatibility(value)
