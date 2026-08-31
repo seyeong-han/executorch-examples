@@ -16,5 +16,7 @@ Preparation accepts only ExecuTorch
 `20ad5ee43ff53804030899d621590af3daadda53` selected in
 `config/dependencies/compatibility.lock.json`, rejects a dirty or mismatched
 checkout, validates all files, and writes `.local/state/prepared.json`.
-Startup verifies that receipt and every checksum. It never installs, builds,
+The manifest also tracks the shared `mlx.metallib` beside the three native
+executables because statically linked MLX discovers that file at runtime.
+Startup verifies the receipt and every checksum. It never installs, builds,
 downloads, exports, or repairs artifacts.

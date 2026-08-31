@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 
 import pytest
@@ -130,6 +131,29 @@ def test_release_ready_verifies_all_landed_gate_commits(
     validate_manifests._validate_compatibility(value, release_checkout=tmp_path)
 
     assert calls == [(tmp_path, "b" * 40, ("1" * 40, "2" * 40, "3" * 40))]
+
+
+@pytest.mark.parametrize(
+    "required_role",
+    [
+        "mlx_metallib",
+        "muse_glimmer_tokenizer_config",
+        "muse_glimmer_chat_template",
+    ],
+)
+def test_artifact_contract_requires_runtime_sidecars(
+    required_role: str, tmp_path, monkeypatch
+) -> None:
+    manifest = json.loads(validate_manifests.ARTIFACT_LOCK.read_text(encoding="utf-8"))
+    manifest["artifacts"] = [
+        artifact for artifact in manifest["artifacts"] if artifact["role"] != required_role
+    ]
+    artifact_lock = tmp_path / "artifacts.json"
+    artifact_lock.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(validate_manifests, "ARTIFACT_LOCK", artifact_lock)
+
+    with pytest.raises(RuntimeError, match="artifact roles differ from the runtime contract"):
+        validate_manifests._validate_artifacts()
 
 
 def test_executorch_artifact_revision_must_match_final_commit() -> None:

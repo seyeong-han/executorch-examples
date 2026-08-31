@@ -30,6 +30,7 @@ _EXECUTORCH_ARTIFACT_ROLES = {
     "parakeet_helper",
     "muse_glimmer_worker",
     "supertonic_runner",
+    "mlx_metallib",
 }
 
 
@@ -87,7 +88,10 @@ def _validate_artifacts() -> None:
         "muse_glimmer_worker",
         "muse_glimmer_model",
         "muse_glimmer_tokenizer",
+        "muse_glimmer_tokenizer_config",
+        "muse_glimmer_chat_template",
         "supertonic_runner",
+        "mlx_metallib",
         "supertonic_model",
         "supertonic_assets",
         "supertonic_voice_style",
