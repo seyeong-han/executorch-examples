@@ -61,10 +61,6 @@ def _command_digest(command: list[str]) -> str:
     return hashlib.sha256(b"\0".join(part.encode() for part in command)).hexdigest()
 
 
-def _observed_command_digest(command: str) -> str:
-    return hashlib.sha256(command.encode()).hexdigest()
-
-
 def _process_start(pid: int) -> str | None:
     result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart="], capture_output=True, text=True)
     value = result.stdout.strip()
@@ -103,16 +99,16 @@ def _service_matches(record: dict[str, object]) -> bool:
         return False
     if _process_start(pid) != record.get("start_time"):
         return False
+    pgid = record.get("pgid")
+    try:
+        actual_pgid = os.getpgid(pid)
+    except ProcessLookupError:
+        return False
+    if not isinstance(pgid, int) or actual_pgid != pgid:
+        return False
     command = _process_command(pid)
     expected = record.get("command_marker")
-    digest = record.get("observed_command_digest")
-    return (
-        isinstance(expected, str)
-        and command is not None
-        and expected in command
-        and isinstance(digest, str)
-        and _observed_command_digest(command) == digest
-    )
+    return isinstance(expected, str) and command is not None and expected in command
 
 
 @contextlib.contextmanager
@@ -133,7 +129,12 @@ def _lifecycle_lock() -> IO[str]:
 
 def _base_environment() -> dict[str, str]:
     allowed = ("HOME", "LANG", "LC_ALL", "PATH", "TMPDIR", "SSL_CERT_FILE")
-    return {name: os.environ[name] for name in allowed if name in os.environ}
+    return {
+        **{name: os.environ[name] for name in allowed if name in os.environ},
+        "HF_HUB_DISABLE_TELEMETRY": "1",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+    }
 
 
 def _artifact(receipt: dict[str, object], role: str) -> str:
@@ -217,7 +218,8 @@ def _services(receipt: dict[str, object], api_key: str, api_secret: str) -> list
         "MUSE_GLIMMER_BASE_URL": "http://127.0.0.1:8000/v1",
         "MUSE_GLIMMER_API_KEY": "local",
         "MUSE_GLIMMER_REASONING_STRENGTH": "low",
-        "MUSE_GLIMMER_MAX_TOKENS": "128",
+        "MUSE_GLIMMER_MAX_TOKENS": "256",
+        "ORT_DISABLE_TELEMETRY": "1",
         "PARAKEET_HELPER_PATH": _artifact(receipt, "parakeet_helper"),
         "PARAKEET_MODEL_PATH": _artifact(receipt, "parakeet_model"),
         "PARAKEET_TOKENIZER_PATH": _artifact(receipt, "parakeet_tokenizer"),
@@ -349,7 +351,6 @@ def _start_service(service: Service) -> tuple[subprocess.Popen[bytes], dict[str,
         "start_time": start_time,
         "command_marker": marker,
         "command_digest": _command_digest(service.command),
-        "observed_command_digest": _observed_command_digest(command),
         "log": str(log_path.relative_to(ROOT)),
     }
 

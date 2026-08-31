@@ -95,6 +95,18 @@ def test_validated_tools_rejects_changed_python_environment(
         dev_stack._validated_tools()
 
 
+def test_base_environment_forces_model_libraries_offline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOME", "/tmp/test-home")
+    environment = dev_stack._base_environment()
+
+    assert environment["HOME"] == "/tmp/test-home"
+    assert environment["HF_HUB_DISABLE_TELEMETRY"] == "1"
+    assert environment["HF_HUB_OFFLINE"] == "1"
+    assert environment["TRANSFORMERS_OFFLINE"] == "1"
+
+
 def test_credentials_are_private_before_secret_is_written(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -136,6 +148,8 @@ def test_service_order_and_local_environment(
     assert worker.environment["LIVEKIT_URL"] == "ws://127.0.0.1:7880"
     assert worker.environment["MUSE_GLIMMER_BASE_URL"] == "http://127.0.0.1:8000/v1"
     assert worker.environment["MUSE_GLIMMER_REASONING_STRENGTH"] == "low"
+    assert worker.environment["MUSE_GLIMMER_MAX_TOKENS"] == "256"
+    assert worker.environment["ORT_DISABLE_TELEMETRY"] == "1"
     assert "OPENAI_API_KEY" not in worker.environment
 
 
@@ -253,20 +267,48 @@ def test_agent_readiness_returns_health_endpoint(
     assert dev_stack._wait_for_agent({"log": "agent.log"}) == "http://127.0.0.1:54321/"
 
 
-def test_process_identity_requires_start_time_and_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    command = ".venv/bin/muse-glimmer-worker dev"
+def test_process_identity_allows_same_pid_exec(monkeypatch: pytest.MonkeyPatch) -> None:
     record = {
         "pid": 42,
+        "pgid": 42,
         "start_time": "Mon Aug 24 00:00:00 2026",
-        "command_marker": "muse-glimmer-worker",
-        "observed_command_digest": dev_stack._observed_command_digest(command),
+        "command_marker": "python",
     }
     monkeypatch.setattr(dev_stack, "_pid_alive", lambda _pid: True)
     monkeypatch.setattr(dev_stack, "_process_start", lambda _pid: record["start_time"])
+    monkeypatch.setattr(dev_stack.os, "getpgid", lambda _pid: 42)
+    monkeypatch.setattr(
+        dev_stack,
+        "_process_command",
+        lambda _pid: ".venv/bin/python -m executorch.examples.models.muse_glimmer.serving.serve",
+    )
+
+    assert dev_stack._service_matches(record)
+
+
+def test_process_identity_rejects_start_group_or_marker_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command = ".venv/bin/muse-glimmer-worker dev"
+    record = {
+        "pid": 42,
+        "pgid": 42,
+        "start_time": "Mon Aug 24 00:00:00 2026",
+        "command_marker": "muse-glimmer-worker",
+    }
+    monkeypatch.setattr(dev_stack, "_pid_alive", lambda _pid: True)
+    monkeypatch.setattr(dev_stack, "_process_start", lambda _pid: record["start_time"])
+    monkeypatch.setattr(dev_stack.os, "getpgid", lambda _pid: 42)
     monkeypatch.setattr(dev_stack, "_process_command", lambda _pid: command)
     assert dev_stack._service_matches(record)
 
     monkeypatch.setattr(dev_stack, "_process_start", lambda _pid: "different process start")
+    assert not dev_stack._service_matches(record)
+    monkeypatch.setattr(dev_stack, "_process_start", lambda _pid: record["start_time"])
+    monkeypatch.setattr(dev_stack.os, "getpgid", lambda _pid: 99)
+    assert not dev_stack._service_matches(record)
+    monkeypatch.setattr(dev_stack.os, "getpgid", lambda _pid: 42)
+    monkeypatch.setattr(dev_stack, "_process_command", lambda _pid: "different-service")
     assert not dev_stack._service_matches(record)
 
 

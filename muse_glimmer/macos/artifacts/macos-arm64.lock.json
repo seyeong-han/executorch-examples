@@ -8,12 +8,12 @@
       "executable": true,
       "distribution": "build",
       "source": "executorch",
-      "revision": null,
+      "revision": "20ad5ee43ff53804030899d621590af3daadda53",
       "license": "BSD-3-Clause",
       "destination": ".local/artifacts/bin/parakeet_helper",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "53a45df84fee869762449602767b9430caa409efb06a6661e621adb56c9f0b20",
+      "size_bytes": 13510864,
       "prepare": "Build from the single pinned ExecuTorch checkout."
     },
     {
@@ -26,8 +26,8 @@
       "license": "CC-BY-4.0",
       "destination": ".local/artifacts/parakeet/model.pte",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "4690cfb245e3511f2822d5e716974ca7343c58c7e76ad95e81e79bcf19dcf4ae",
+      "size_bytes": 484430860,
       "prepare": "Place a licensed compatible artifact and record its checksum locally."
     },
     {
@@ -40,8 +40,8 @@
       "license": "CC-BY-4.0",
       "destination": ".local/artifacts/parakeet/tokenizer.model",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "eacec2b0a77f336d4a2ca4a25a7047575d3c2b74de47e997f4c205126ed3135e",
+      "size_bytes": 360916,
       "prepare": "Place a licensed compatible tokenizer and record its checksum locally."
     },
     {
@@ -50,12 +50,12 @@
       "executable": true,
       "distribution": "build",
       "source": "executorch",
-      "revision": null,
+      "revision": "20ad5ee43ff53804030899d621590af3daadda53",
       "license": "BSD-3-Clause",
       "destination": ".local/artifacts/bin/muse_glimmer_worker",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "d6f7e97531835823912a5269bdee1eeebc2aa81eb940f6c2ea4eadd3b33a1b43",
+      "size_bytes": 12726128,
       "prepare": "Build from the single pinned ExecuTorch checkout."
     },
     {
@@ -68,8 +68,8 @@
       "license": "Apache-2.0",
       "destination": ".local/artifacts/muse-glimmer/model.pte",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "6fbec8fc06f50e84c1a0e1fb1588bb825b1b5a3bbc314558faec2541a12f42e4",
+      "size_bytes": 19641819904,
       "prepare": "Place a licensed compatible artifact and record its checksum locally."
     },
     {
@@ -82,8 +82,8 @@
       "license": "Apache-2.0",
       "destination": ".local/artifacts/muse-glimmer/tokenizer.json",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "c9dbee66967b58f31a7c27f723c3760da3526ccd0427578e8905b0abb0031c4d",
+      "size_bytes": 28129897,
       "prepare": "Place a licensed compatible tokenizer and record its checksum locally."
     },
     {
@@ -96,8 +96,8 @@
       "license": "Apache-2.0",
       "destination": ".local/artifacts/muse-glimmer/tokenizer_config.json",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "781e6c74f571642c71202167b67d9255b28cc439bdda1582ff31346182f5a9c5",
+      "size_bytes": 79936,
       "prepare": "Place the immutable tokenizer configuration beside tokenizer.json."
     },
     {
@@ -110,8 +110,8 @@
       "license": "Apache-2.0",
       "destination": ".local/artifacts/muse-glimmer/chat_template.jinja",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "cfc67e5f349f37690dfd31ed1f18bc4442a9dd32fe39a648f993cb4eb3cae678",
+      "size_bytes": 9992,
       "prepare": "Place the canonical immutable chat template beside tokenizer.json."
     },
     {
@@ -120,12 +120,12 @@
       "executable": true,
       "distribution": "build",
       "source": "executorch",
-      "revision": null,
+      "revision": "20ad5ee43ff53804030899d621590af3daadda53",
       "license": "BSD-3-Clause",
       "destination": ".local/artifacts/bin/supertonic_runner",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "d3629e6337103e4ffa6ce930e7fa58ede810f44648b19a253a249d38a0813adf",
+      "size_bytes": 5942144,
       "prepare": "Build from the single pinned ExecuTorch checkout."
     },
     {
@@ -133,13 +133,13 @@
       "kind": "file",
       "executable": false,
       "distribution": "build",
-      "source": "executorch",
-      "revision": null,
-      "license": "BSD-3-Clause",
+      "source": "https://github.com/ml-explore/mlx.git",
+      "revision": "7a1d4f5c12ac82f4b4d0a6e71538d89ca0605247",
+      "license": "MIT",
       "destination": ".local/artifacts/bin/mlx.metallib",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "713ddc7352f74d1bf4c50ea19fc65ea6f253d5779ed46b3108eac8a1c26d83ec",
+      "size_bytes": 1268028,
       "prepare": "Copy the MLX metallib built beside the final-pinned native executables."
     },
     {
@@ -152,8 +152,8 @@
       "license": "BigScience Open RAIL-M",
       "destination": ".local/artifacts/supertonic/model.pte",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "8aa17b185db9c4b18c8bebd49414337342a0499985e8218d6c30f618c8227432",
+      "size_bytes": 198747136,
       "prepare": "Export from approved Supertonic assets during artifact preparation."
     },
     {
@@ -166,8 +166,8 @@
       "license": "BigScience Open RAIL-M",
       "destination": ".local/artifacts/supertonic/assets",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "a5dec49a53ee1f69fd869e5298ccb7cdedc2ec13b91b3d0d1534f28ea0f0b23c",
+      "size_bytes": 398668429,
       "prepare": "Place licensed assets and record their tree checksum locally."
     },
     {
@@ -180,8 +180,8 @@
       "license": "BigScience Open RAIL-M",
       "destination": ".local/artifacts/supertonic/voice-style.json",
       "sensitive": true,
-      "sha256": null,
-      "size_bytes": null,
+      "sha256": "bbdec6ee00231c2c742ad05483df5334cab3b52fda3ba38e6a07059c4563dbc2",
+      "size_bytes": 292046,
       "prepare": "Place one licensed batch-1 voice style and record its checksum locally."
     }
   ]

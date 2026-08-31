@@ -69,6 +69,12 @@ def sha256_tree(path: Path) -> str:
     return digest.hexdigest()
 
 
+def artifact_size(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+
+
 def digest_json(path: Path) -> str:
     return sha256_file(path)
 
@@ -270,4 +276,10 @@ def load_valid_receipt() -> dict[str, Any]:
         actual = sha256_tree(path) if path.is_dir() else sha256_file(path)
         if actual != item.get("sha256"):
             raise RuntimeError(f"prepared artifact checksum changed: {role}")
+        actual_size = artifact_size(path)
+        expected_size = requirement.get("size_bytes")
+        if actual_size != item.get("size_bytes") or (
+            expected_size is not None and actual_size != expected_size
+        ):
+            raise RuntimeError(f"prepared artifact size changed: {role}")
     return receipt

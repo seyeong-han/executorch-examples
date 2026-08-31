@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
-import socket
 import stat
 import subprocess
 import sys
@@ -101,16 +101,18 @@ def _assert_no_external_connections() -> None:
             continue
         if process_group not in managed_pgids:
             continue
-        endpoint = columns[-1]
+        endpoint = next((column for column in reversed(columns) if "->" in column), None)
+        if endpoint is None:
+            raise RuntimeError(f"managed process has an unparseable connection: {row}")
         remote = endpoint.rsplit("->", 1)[-1]
         host = remote.rsplit(":", 1)[0].strip("[]")
         try:
-            address = socket.gethostbyname(host)
-        except OSError:
+            address = ipaddress.ip_address(host)
+        except ValueError:
             raise RuntimeError(
-                f"managed process has an unresolved connection: {endpoint}"
+                f"managed process has an unparseable connection: {endpoint}"
             ) from None
-        if not address.startswith("127."):
+        if not address.is_loopback:
             raise RuntimeError(f"managed process has a non-loopback connection: {endpoint}")
 
 

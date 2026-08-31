@@ -156,6 +156,27 @@ def test_artifact_contract_requires_runtime_sidecars(
         validate_manifests._validate_artifacts()
 
 
+def test_mlx_metallib_requires_pinned_submodule_provenance() -> None:
+    artifact = {
+        "role": "mlx_metallib",
+        "source": "executorch",
+        "revision": "b" * 40,
+        "sha256": "c" * 64,
+        "size_bytes": 1,
+        "license": "BSD-3-Clause",
+    }
+
+    with pytest.raises(RuntimeError, match="MLX metallib provenance"):
+        validate_manifests._validate_release_artifacts([artifact], "b" * 40)
+
+    artifact.update(
+        source="https://github.com/ml-explore/mlx.git",
+        revision="7a1d4f5c12ac82f4b4d0a6e71538d89ca0605247",
+        license="MIT",
+    )
+    validate_manifests._validate_release_artifacts([artifact], "b" * 40)
+
+
 def test_executorch_artifact_revision_must_match_final_commit() -> None:
     artifact = {
         "role": "supertonic_runner",

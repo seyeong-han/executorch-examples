@@ -13,6 +13,7 @@ from scripts.repository import (
     PREPARED_RECEIPT,
     ROOT,
     TOOLCHAIN_LOCK,
+    artifact_size,
     atomic_write_json,
     digest_json,
     ensure_local_directories,
@@ -66,10 +67,14 @@ def main() -> int:
         expected_checksum = item.get("sha256")
         if expected_checksum and checksum != expected_checksum:
             raise RuntimeError(f"checksum mismatch for {item['role']}")
+        size_bytes = artifact_size(path)
+        expected_size = item.get("size_bytes")
+        if expected_size is not None and size_bytes != expected_size:
+            raise RuntimeError(f"size mismatch for {item['role']}")
         inventory[item["role"]] = {
             "path": item["destination"],
             "sha256": checksum,
-            "size_bytes": path.stat().st_size if path.is_file() else None,
+            "size_bytes": size_bytes,
         }
     if missing:
         details = "\n  ".join(missing)

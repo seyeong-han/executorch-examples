@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "artifact-gated",
+  "status": "validation-gated",
   "platform": "macos-arm64",
   "executorch": {
     "repository": "https://github.com/pytorch/executorch.git",
@@ -34,5 +34,5 @@
     "server_requirement": ">=1.9,<2"
   },
   "ready_for_release": false,
-  "release_blocker": "Populate final artifact provenance and pass clean-machine macOS arm64 end-to-end validation."
+  "release_blocker": "Pass final clean-machine macOS arm64 end-to-end validation."
 }

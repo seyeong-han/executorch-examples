@@ -30,8 +30,9 @@ _EXECUTORCH_ARTIFACT_ROLES = {
     "parakeet_helper",
     "muse_glimmer_worker",
     "supertonic_runner",
-    "mlx_metallib",
 }
+_MLX_REPOSITORY = "https://github.com/ml-explore/mlx.git"
+_MLX_COMMIT = "7a1d4f5c12ac82f4b4d0a6e71538d89ca0605247"
 
 
 def _load(path: Path) -> dict[str, object]:
@@ -178,6 +179,12 @@ def _validate_release_artifacts(artifacts: object, final_executorch_commit: obje
             raise RuntimeError(
                 f"ExecuTorch-built artifact must match the final compatibility commit: {role}"
             )
+        if role == "mlx_metallib" and (
+            source != _MLX_REPOSITORY
+            or artifact.get("revision") != _MLX_COMMIT
+            or artifact.get("license") != "MIT"
+        ):
+            raise RuntimeError("MLX metallib provenance must match the pinned MLX submodule")
 
 
 def main() -> int:

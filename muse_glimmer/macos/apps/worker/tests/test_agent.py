@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -103,3 +104,7 @@ async def test_normal_shutdown_callback_cleanup_once(
 def test_worker_is_loopback_only_with_neutral_agent_name() -> None:
     assert agent.server._host == "127.0.0.1"
     assert agent.server._agent_name == "assistant"
+
+
+def test_onnx_runtime_telemetry_is_disabled_before_agent_import() -> None:
+    assert os.environ["ORT_DISABLE_TELEMETRY"] == "1"

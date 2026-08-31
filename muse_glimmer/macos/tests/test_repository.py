@@ -30,6 +30,17 @@ def test_atomic_write_json_uses_private_permissions(tmp_path: Path) -> None:
     assert destination.stat().st_mode & 0o777 == 0o600
 
 
+def test_artifact_size_counts_regular_file_bytes(tmp_path: Path) -> None:
+    artifact = tmp_path / "artifact"
+    nested = artifact / "nested"
+    nested.mkdir(parents=True)
+    (artifact / "one.bin").write_bytes(b"123")
+    (nested / "two.bin").write_bytes(b"4567")
+
+    assert repository.artifact_size(artifact / "one.bin") == 3
+    assert repository.artifact_size(artifact) == 7
+
+
 def test_installed_environment_fingerprint_detects_same_version_content_change(
     tmp_path: Path,
 ) -> None:
@@ -49,6 +60,125 @@ def test_installed_environment_fingerprint_detects_same_version_content_change(
     second = repository.installed_environment_fingerprint([Distribution()])
 
     assert first != second
+
+
+def test_load_valid_receipt_rejects_size_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    local = tmp_path / ".local"
+    artifact = local / "artifacts" / "model.bin"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"model")
+    state = local / "state"
+    state.mkdir()
+    compatibility_lock = tmp_path / "compatibility.json"
+    compatibility_lock.write_text(json.dumps({"executorch": {"commit": "expected", "gates": {}}}))
+    artifact_lock = tmp_path / "artifacts.json"
+    artifact_lock.write_text(
+        json.dumps(
+            {
+                "artifacts": [
+                    {
+                        "role": "model",
+                        "kind": "file",
+                        "executable": False,
+                        "destination": ".local/artifacts/model.bin",
+                        "size_bytes": 5,
+                    }
+                ]
+            }
+        )
+    )
+    toolchain_lock = tmp_path / "toolchain.json"
+    toolchain_lock.write_text("{}")
+    receipt = {
+        "executorch_commit": "expected",
+        "executorch_checkout": str(tmp_path / "executorch"),
+        "locks": {},
+        "artifacts": {
+            "model": {
+                "path": ".local/artifacts/model.bin",
+                "sha256": repository.sha256_file(artifact),
+                "size_bytes": 4,
+            }
+        },
+    }
+    prepared_receipt = state / "prepared.json"
+    prepared_receipt.write_text(json.dumps(receipt))
+    monkeypatch.setattr(repository, "ROOT", tmp_path)
+    monkeypatch.setattr(repository, "LOCAL", local)
+    monkeypatch.setattr(repository, "PREPARED_RECEIPT", prepared_receipt)
+    monkeypatch.setattr(repository, "COMPATIBILITY_LOCK", compatibility_lock)
+    monkeypatch.setattr(repository, "ARTIFACT_LOCK", artifact_lock)
+    monkeypatch.setattr(repository, "TOOLCHAIN_LOCK", toolchain_lock)
+    receipt["locks"] = {
+        "compatibility": repository.digest_json(compatibility_lock),
+        "artifacts": repository.digest_json(artifact_lock),
+        "toolchain": repository.digest_json(toolchain_lock),
+    }
+    prepared_receipt.write_text(json.dumps(receipt))
+    monkeypatch.setattr(repository, "validate_executorch_checkout", lambda *args, **kwargs: None)
+
+    with pytest.raises(RuntimeError, match="prepared artifact size changed"):
+        repository.load_valid_receipt()
+
+
+def test_load_valid_receipt_accepts_measured_size_when_manifest_size_is_pending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    local = tmp_path / ".local"
+    artifact = local / "artifacts" / "model.bin"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"model")
+    state = local / "state"
+    state.mkdir()
+    compatibility_lock = tmp_path / "compatibility.json"
+    compatibility_lock.write_text(json.dumps({"executorch": {"commit": "expected", "gates": {}}}))
+    artifact_lock = tmp_path / "artifacts.json"
+    artifact_lock.write_text(
+        json.dumps(
+            {
+                "artifacts": [
+                    {
+                        "role": "model",
+                        "kind": "file",
+                        "executable": False,
+                        "destination": ".local/artifacts/model.bin",
+                        "size_bytes": None,
+                    }
+                ]
+            }
+        )
+    )
+    toolchain_lock = tmp_path / "toolchain.json"
+    toolchain_lock.write_text("{}")
+    receipt = {
+        "executorch_commit": "expected",
+        "executorch_checkout": str(tmp_path / "executorch"),
+        "locks": {
+            "compatibility": repository.digest_json(compatibility_lock),
+            "artifacts": repository.digest_json(artifact_lock),
+            "toolchain": repository.digest_json(toolchain_lock),
+        },
+        "artifacts": {
+            "model": {
+                "path": ".local/artifacts/model.bin",
+                "sha256": repository.sha256_file(artifact),
+                "size_bytes": 5,
+            }
+        },
+    }
+    prepared_receipt = state / "prepared.json"
+    prepared_receipt.write_text(json.dumps(receipt))
+    monkeypatch.setattr(repository, "ROOT", tmp_path)
+    monkeypatch.setattr(repository, "LOCAL", local)
+    monkeypatch.setattr(repository, "PREPARED_RECEIPT", prepared_receipt)
+    monkeypatch.setattr(repository, "COMPATIBILITY_LOCK", compatibility_lock)
+    monkeypatch.setattr(repository, "ARTIFACT_LOCK", artifact_lock)
+    monkeypatch.setattr(repository, "TOOLCHAIN_LOCK", toolchain_lock)
+    monkeypatch.setattr(repository, "validate_executorch_checkout", lambda *args, **kwargs: None)
+
+    assert repository.load_valid_receipt()["artifacts"]["model"]["size_bytes"] == 5
 
 
 def test_executorch_checkout_rejects_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
