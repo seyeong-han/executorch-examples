@@ -6,6 +6,7 @@ import {
 } from "@livekit/components-react";
 import { ConnectionState } from "livekit-client";
 
+import { selectMuseFace } from "../avatar/avatarExpression";
 import { MuseAvatar } from "../avatar/MuseAvatar";
 import { useNamedAgentState } from "../hooks/useNamedAgentState";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
@@ -37,16 +38,21 @@ export function VoiceSession({
     namedAgent.hasNamedAgent,
     namedAgent.agentState,
   );
+  const face = selectMuseFace(presentation.animation, transcript);
 
   return (
-    <main className={`voice-shell tone-${presentation.tone}`}>
-      <Header status={presentation.status} />
+    <main
+      className={`voice-shell conversation-shell tone-${presentation.tone}`}
+    >
+      <Header />
       <section className="presence" aria-label="Muse voice assistant">
-        <div className="presence-halo" aria-hidden="true" />
-        <MuseAvatar
-          animation={presentation.animation}
-          reducedMotion={reducedMotion}
-        />
+        <div className="presence-avatar">
+          <MuseAvatar
+            animation={presentation.animation}
+            face={face}
+            reducedMotion={reducedMotion}
+          />
+        </div>
         <div className="state-caption" aria-live="polite" aria-atomic="true">
           <span className="state-mark" aria-hidden="true" />
           {presentation.status}
@@ -54,12 +60,11 @@ export function VoiceSession({
             <span className="muted-note"> | Microphone muted</span>
           ) : null}
         </div>
+        <div className="transcript-row">
+          <CompactTranscript entries={transcript} />
+        </div>
       </section>
       <div className="conversation-dock">
-        <CompactTranscript
-          entries={transcript}
-          isMuted={!isMicrophoneEnabled}
-        />
         <StartAudio className="audio-unlock" label="Enable sound" />
         <SessionControls onEnding={onEnding} onEnded={onEnded} />
       </div>
@@ -68,16 +73,13 @@ export function VoiceSession({
   );
 }
 
-function Header({ status }: { status: string }) {
+function Header() {
   return (
     <header className="app-header">
       <div className="header-title">
         <RuntimeBadge />
         <p className="eyebrow">Local Voice Agent</p>
         <h1>Talk with Muse Glimmer</h1>
-        <p className="header-status" aria-hidden="true">
-          {status}
-        </p>
       </div>
     </header>
   );

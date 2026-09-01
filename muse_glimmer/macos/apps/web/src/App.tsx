@@ -104,7 +104,6 @@ export default function App() {
         className="presence welcome-presence"
         aria-labelledby="welcome-title"
       >
-        <div className="presence-halo" aria-hidden="true" />
         <MuseAvatar
           animation={presentation.animation}
           reducedMotion={reducedMotion}

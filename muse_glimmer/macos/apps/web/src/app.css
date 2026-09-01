@@ -47,14 +47,7 @@ button:focus-visible {
   min-height: 100dvh;
   overflow: hidden;
   color: var(--ink);
-  background:
-    linear-gradient(rgba(6, 104, 225, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(6, 104, 225, 0.055) 1px, transparent 1px),
-    linear-gradient(145deg, #fbfdff 0%, #eef6ff 55%, #dceeff 100%);
-  background-size:
-    48px 48px,
-    48px 48px,
-    auto;
+  background: linear-gradient(145deg, #fbfdff 0%, #eef6ff 55%, #dceeff 100%);
   isolation: isolate;
 }
 
@@ -124,50 +117,20 @@ button:focus-visible {
   backdrop-filter: blur(12px);
 }
 
-.runtime-chip {
-  position: relative;
-  display: grid;
+.runtime-logo {
+  display: block;
   width: 32px;
   height: 32px;
-  place-items: center;
-  color: #fff;
-  border: 1px solid #032b62;
+  border: 1px solid rgba(6, 26, 53, 0.14);
   border-radius: 8px;
-  background: #061a35;
-  box-shadow:
-    inset 0 0 0 3px #fff,
-    inset 0 0 0 4px #82bbf6;
-  font-size: 0.55rem;
-  font-weight: 700;
-}
-
-.runtime-chip::before,
-.runtime-chip::after {
-  position: absolute;
-  inset: 5px -4px;
-  border-top: 1px solid #061a35;
-  border-bottom: 1px solid #061a35;
-  content: "";
-}
-
-.runtime-chip::after {
-  inset: -4px 5px;
-  border: 0;
-  border-right: 1px solid #061a35;
-  border-left: 1px solid #061a35;
+  background: #fff;
+  object-fit: contain;
 }
 
 .runtime-badge strong {
   color: var(--ink);
   font-size: 0.92rem;
   font-weight: 700;
-}
-
-.header-status {
-  margin: 7px 0 0;
-  color: #52647d;
-  font-size: 0.78rem;
-  font-weight: 500;
 }
 
 .presence {
@@ -180,25 +143,12 @@ button:focus-visible {
   padding: 18px 24px;
 }
 
-.presence-halo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(52vw, 570px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(62, 78, 101, 0.1);
-  border-radius: 50%;
-  background: repeating-radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.44) 0,
-    rgba(255, 255, 255, 0.44) 1px,
-    transparent 1px,
-    transparent 34px
-  );
-  transform: translate(-50%, -53%);
-  transition:
-    scale 700ms ease,
-    opacity 700ms ease;
+.presence-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .muse-avatar {
@@ -219,71 +169,35 @@ button:focus-visible {
   overflow: visible;
 }
 
-.muse-orbit {
-  fill: none;
-  stroke: rgba(6, 104, 225, 0.16);
-  stroke-dasharray: 3 9;
-  stroke-linecap: round;
-  stroke-width: 1.5;
-  transform-origin: center;
-  animation: orbit 32s linear infinite;
-}
-
-.muse-orbit path {
-  opacity: 0.55;
-  stroke-dasharray: 1 12;
-}
-
 .muse-character {
-  transform-origin: 180px 190px;
+  transform-origin: 0 8px;
   animation: breathe 4.8s ease-in-out infinite;
 }
 
-.muse-ear {
-  fill: #0575e6;
-  stroke: rgba(255, 255, 255, 0.28);
-  stroke-width: 2;
-  transform-origin: center;
-  transition: transform 360ms ease;
-}
-
 .muse-body {
-  stroke: rgba(255, 255, 255, 0.58);
-  stroke-width: 2;
-}
-
-.muse-body-glow {
-  mix-blend-mode: screen;
-  pointer-events: none;
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 1.35;
 }
 
 .muse-face {
-  transform-origin: 180px 178px;
+  transform-origin: 0 22px;
   transition: transform 360ms ease;
 }
 
-.muse-eye {
-  fill: #fff;
+.muse-eye-cutout {
   transform-box: fill-box;
   transform-origin: center;
   transition: transform 280ms ease;
   animation: blink 6.4s ease-in-out infinite;
 }
 
-.muse-mouth {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.8);
-  stroke-linecap: round;
-  stroke-width: 4;
-  transition: d 300ms ease;
-}
-
 .muse-voice {
   fill: none;
   opacity: 0;
-  stroke: #fff;
+  stroke: rgba(255, 255, 255, 0.92);
   stroke-linecap: round;
-  stroke-width: 5;
+  stroke-width: 3;
   transition: opacity 240ms ease;
 }
 
@@ -296,16 +210,8 @@ button:focus-visible {
   animation: attentive 2.4s ease-in-out infinite;
 }
 
-.muse-avatar[data-animation="listening"] .muse-ear-left {
-  transform: rotate(-7deg) translate(-2px, -3px);
-}
-
-.muse-avatar[data-animation="listening"] .muse-ear-right {
-  transform: rotate(7deg) translate(2px, -3px);
-}
-
-.muse-avatar[data-animation="listening"] .muse-eye {
-  transform: scaleY(1.08);
+.muse-avatar[data-animation="listening"] .muse-eye-cutout {
+  transform: scale(1.08);
 }
 
 .muse-avatar[data-animation="thinking"] .muse-character {
@@ -313,27 +219,23 @@ button:focus-visible {
 }
 
 .muse-avatar[data-animation="thinking"] .muse-face {
-  transform: translate(9px, -7px) rotate(2deg);
+  transform: translate(5px, -4px) rotate(2deg);
 }
 
 .muse-avatar[data-animation="thinking"] .muse-eye-right {
-  transform: scaleY(0.7);
+  transform: scaleX(0.78);
 }
 
 .muse-avatar[data-animation="working"] .muse-character {
   animation: working 1.5s ease-in-out infinite;
 }
 
-.muse-avatar[data-animation="working"] .muse-orbit {
-  animation-duration: 8s;
-}
-
 .muse-avatar[data-animation="happy"] .muse-character {
   animation: speaking 800ms ease-in-out infinite alternate;
 }
 
-.muse-avatar[data-animation="happy"] .muse-eye {
-  transform: scaleY(0.82);
+.muse-avatar[data-animation="happy"] .muse-eye-cutout {
+  transform: scale(1.08);
 }
 
 .muse-avatar[data-animation="happy"] .muse-voice {
@@ -348,16 +250,6 @@ button:focus-visible {
   animation: waveform 780ms 120ms ease-in-out infinite alternate-reverse;
 }
 
-.tone-active .presence-halo {
-  opacity: 0.82;
-  scale: 1.045;
-}
-
-.tone-speaking .presence-halo {
-  opacity: 1;
-  scale: 1.09;
-}
-
 .tone-speaking .muse-avatar {
   filter: drop-shadow(0 34px 38px rgba(6, 104, 225, 0.26));
 }
@@ -367,10 +259,12 @@ button:focus-visible {
 }
 
 .state-caption {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   min-height: 30px;
-  margin-top: -10px;
+  margin: 0;
   color: #40536f;
   font-size: 0.84rem;
   font-weight: 600;
@@ -395,39 +289,73 @@ button:focus-visible {
   font-weight: 400;
 }
 
+.conversation-shell {
+  grid-template-rows: auto auto auto;
+  align-content: safe center;
+  row-gap: 20px;
+  padding-block: max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.conversation-shell .app-header {
+  padding: 0 clamp(24px, 5vw, 72px);
+}
+
+.conversation-shell .header-title .runtime-badge {
+  margin-bottom: 16px;
+}
+
+.conversation-shell .presence {
+  grid-template-rows: auto 30px 152px;
+  align-content: start;
+  row-gap: 16px;
+  padding: 8px 24px 2px;
+}
+
+.conversation-shell .muse-avatar {
+  align-self: center;
+  width: clamp(265px, 33vw, 450px);
+}
+
 .conversation-dock {
   z-index: 3;
   display: grid;
+  align-content: end;
   justify-items: center;
-  padding: 0 clamp(20px, 5vw, 72px)
-    max(28px, calc(env(safe-area-inset-bottom) + 20px));
+  min-height: 101px;
+  padding: 16px clamp(20px, 5vw, 72px) 0;
+}
+
+.transcript-row {
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .transcript {
   display: grid;
   align-items: end;
   width: min(720px, 100%);
-  min-height: 84px;
-  max-height: 152px;
-  margin-bottom: 18px;
-  overflow: hidden;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(6, 104, 225, 0.3) transparent;
+  scrollbar-width: thin;
+  scroll-behavior: smooth;
   mask-image: linear-gradient(to bottom, transparent 0, black 24%, black 100%);
-}
-
-.transcript-empty {
-  align-self: center;
-  margin: 0;
-  color: #52647d;
-  font-size: 1.05rem;
-  font-weight: 500;
-  text-align: center;
 }
 
 .transcript-list {
   display: grid;
   gap: 7px;
   margin: 0;
-  padding: 20px 0 0;
+  padding: 20px 8px 2px 0;
   list-style: none;
 }
 
@@ -551,24 +479,44 @@ button:focus-visible {
   cursor: pointer;
 }
 
+.welcome-shell {
+  grid-template-rows: auto clamp(430px, 58dvh, 540px) auto;
+  align-content: center;
+  row-gap: 20px;
+}
+
+.welcome-shell {
+  padding-block: max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+.welcome-shell .app-header {
+  padding: 0 clamp(24px, 5vw, 72px);
+}
+
+.welcome-shell .header-title .runtime-badge {
+  margin-bottom: 16px;
+}
+
 .welcome-presence {
   align-content: center;
-  padding-bottom: 8px;
+  padding: 8px 24px 2px;
 }
 
 .welcome-presence .muse-avatar {
-  width: clamp(270px, 36vw, 500px);
+  width: clamp(265px, 33vw, 450px);
 }
 
 .welcome-copy {
   width: min(560px, 92vw);
-  margin-top: -18px;
+  margin-top: -20px;
   text-align: center;
 }
 
 .welcome-copy h2 {
   display: grid;
-  gap: 6px;
+  gap: 9px;
   margin: 0;
   font-size: 2.2rem;
   font-weight: 600;
@@ -582,7 +530,7 @@ button:focus-visible {
 
 .welcome-copy p {
   width: min(460px, 100%);
-  margin: 10px auto 0;
+  margin: 18px auto 0;
   color: #485c77;
   font-size: 0.91rem;
   line-height: 1.55;
@@ -591,8 +539,10 @@ button:focus-visible {
 .welcome-actions {
   z-index: 3;
   display: grid;
+  align-content: end;
   justify-items: center;
-  padding: 12px 24px max(36px, calc(env(safe-area-inset-bottom) + 22px));
+  min-height: 101px;
+  padding: 16px 24px 0;
 }
 
 .privacy-note {
@@ -654,12 +604,6 @@ button:focus-visible {
   }
 }
 
-@keyframes orbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes attentive {
   0%,
   100% {
@@ -714,10 +658,6 @@ button:focus-visible {
     width: min(38vh, 340px);
   }
 
-  .presence-halo {
-    width: min(48vh, 430px);
-  }
-
   .transcript {
     min-height: 65px;
     max-height: 95px;
@@ -729,13 +669,6 @@ button:focus-visible {
 }
 
 @media (max-width: 680px) {
-  .voice-shell {
-    background-size:
-      36px 36px,
-      36px 36px,
-      auto;
-  }
-
   .app-header {
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
@@ -761,11 +694,10 @@ button:focus-visible {
     font-size: 0.68rem;
   }
 
-  .runtime-chip {
+  .runtime-logo {
     width: 26px;
     height: 26px;
     border-radius: 7px;
-    font-size: 0.48rem;
   }
 
   .runtime-badge strong {
@@ -776,12 +708,9 @@ button:focus-visible {
     padding: 8px 16px;
   }
 
-  .presence-halo {
-    width: min(94vw, 470px);
-  }
-
   .muse-avatar,
-  .welcome-presence .muse-avatar {
+  .welcome-presence .muse-avatar,
+  .conversation-shell .muse-avatar {
     width: min(77vw, 380px);
   }
 
@@ -797,14 +726,17 @@ button:focus-visible {
     font-size: 0.84rem;
   }
 
+  .conversation-shell .presence {
+    grid-template-rows: auto 30px 126px;
+  }
+
   .conversation-dock {
     padding-right: 16px;
     padding-left: 16px;
   }
 
   .transcript {
-    min-height: 76px;
-    max-height: 126px;
+    max-height: 100%;
   }
 
   .transcript-line {

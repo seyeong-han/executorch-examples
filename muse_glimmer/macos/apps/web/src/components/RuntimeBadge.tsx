@@ -1,9 +1,9 @@
+import executorchLogo from "../assets/et-logo.png";
+
 export function RuntimeBadge() {
   return (
     <div className="runtime-badge" aria-label="Running on ExecuTorch">
-      <span className="runtime-chip" aria-hidden="true">
-        <span>ET</span>
-      </span>
+      <img className="runtime-logo" src={executorchLogo} alt="" />
       <span>
         Running on <strong>ExecuTorch</strong>
       </span>

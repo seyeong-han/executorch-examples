@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { TranscriptEntry } from "../lib/transcript";
 import { CompactTranscript } from "./CompactTranscript";
@@ -20,16 +20,32 @@ function entry(
 }
 
 describe("compact transcript", () => {
-  it("gives useful empty guidance for microphone state", () => {
-    const { rerender } = render(
-      <CompactTranscript entries={[]} isMuted={false} />,
-    );
-    expect(screen.getByText("Say something to begin.")).toBeVisible();
+  it("stays hidden until the first transcript arrives", () => {
+    const { container } = render(<CompactTranscript entries={[]} />);
 
-    rerender(<CompactTranscript entries={[]} isMuted />);
-    expect(
-      screen.getByText("Unmute when you are ready to speak."),
-    ).toBeVisible();
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("scrolls smoothly when the newest transcript text changes", () => {
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+    const initialEntry = entry(1, "agent");
+    const { rerender } = render(<CompactTranscript entries={[initialEntry]} />);
+    scrollTo.mockClear();
+
+    rerender(
+      <CompactTranscript
+        entries={[{ ...initialEntry, text: "A longer interim response" }]}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenCalledWith({
+      top: 0,
+      behavior: "smooth",
+    });
   });
 
   it("renders only the six newest entries with speaker labels and interim styling", () => {
@@ -38,7 +54,6 @@ describe("compact transcript", () => {
         entries={Array.from({ length: 8 }, (_, index) =>
           entry(index, index % 2 ? "agent" : "user"),
         )}
-        isMuted={false}
       />,
     );
 

@@ -10,7 +10,7 @@ describe("Muse avatar", () => {
     expect(
       screen.getByRole("img", { name: /Muse Glimmer/i }),
     ).toHaveAccessibleDescription(
-      "An abstract blue voice companion, currently listening.",
+      "An abstract blue voice companion showing the attentive expression, currently listening.",
     );
   });
 
@@ -23,12 +23,27 @@ describe("Muse avatar", () => {
       "data-animation",
       "idle",
     );
+    expect(container.firstElementChild).toHaveAttribute("data-face", "happy");
     expect(container.firstElementChild).toHaveAttribute(
       "data-reduced-motion",
       "true",
     );
     expect(screen.getByRole("img")).toHaveAccessibleDescription(
-      "An abstract blue voice companion, currently speaking.",
+      "An abstract blue voice companion showing the happy expression, currently speaking.",
+    );
+  });
+
+  it("renders an explicitly selected conversational face", () => {
+    const { container } = render(
+      <MuseAvatar animation="thinking" face="confused" reducedMotion={false} />,
+    );
+
+    expect(container.firstElementChild).toHaveAttribute(
+      "data-face",
+      "confused",
+    );
+    expect(screen.getByRole("img")).toHaveAccessibleDescription(
+      "An abstract blue voice companion showing the confused expression, currently thinking.",
     );
   });
 });

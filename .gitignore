@@ -1,6 +1,7 @@
 # System files
 .DS_Store
 *.png
+!muse_glimmer/macos/apps/web/src/assets/et-logo.png
 
 # IDE / editor settings
 .claude/
